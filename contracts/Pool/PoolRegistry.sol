@@ -14,121 +14,84 @@ import { ensureNonzeroAddress } from "../lib/validators.sol";
 /**
  * @title PoolRegistry
  * @author Venus
- * @notice The Isolated Pools architecture centers around the `PoolRegistry` contract. The `PoolRegistry` maintains a directory of isolated lending
- * pools and can perform actions like creating and registering new pools, adding new markets to existing pools, setting and updating the pool's required
- * metadata, and providing the getter methods to get information on the pools.
- *
- * Isolated lending has three main components: PoolRegistry, pools, and markets. The PoolRegistry is responsible for managing pools.
- * It can create new pools, update pool metadata and manage markets within pools. PoolRegistry contains getter methods to get the details of
- * any existing pool like `getVTokenForAsset` and `getPoolsSupportedByAsset`. It also contains methods for updating pool metadata (`updatePoolMetadata`)
- * and setting pool name (`setPoolName`).
- *
- * The directory of pools is managed through two mappings: `_poolByComptroller` which is a hashmap with the comptroller address as the key and `VenusPool` as
- * the value and `_poolsByID` which is an array of comptroller addresses. Individual pools can be accessed by calling `getPoolByComptroller` with the pool's
- * comptroller address. `_poolsByID` is used to iterate through all of the pools.
- *
- * PoolRegistry also contains a map of asset addresses called `_supportedPools` that maps to an array of assets suppored by each pool. This array of pools by
- * asset is retrieved by calling `getPoolsSupportedByAsset`.
- *
- * PoolRegistry registers new isolated pools in the directory with the `createRegistryPool` method. Isolated pools are composed of independent markets with
- * specific assets and custom risk management configurations according to their markets.
+ * @notice 
+    隔离池架构以“PoolRegistry”合约为中心。 `PoolRegistry` 维护着一个独立借贷的目录
+  * 池，可以执行创建和注册新池、向现有池添加新市场、设置和更新池所需的操作
+  * 元数据，并提供 getter 方法来获取有关池的信息。
+  *
+  * 隔离借贷由三个主要组成部分：PoolRegistry、资金池和市场。 PoolRegistry 负责管理池。
+  * 它可以创建新池、更新池元数据以及管理池内的市场。 PoolRegistry 包含 getter 方法来获取详细信息
+  * 任何现有池，例如“getVTokenForAsset”和“getPoolsSupportedByAsset”。 它还包含更新池元数据的方法（`updatePoolMetadata`）
+  * 并设置池名称（`setPoolName`）。
+  *
+  * 矿池目录通过两个映射进行管理：`_poolByComptroller` 是一个以 comptroller 地址为键的 hashmap，“VenusPool” 为
+  * 值和“_poolsByID”，它是一个控制器地址数组。 可以通过使用池的“getPoolByComptroller”调用“getPoolByComptroller”来访问各个池
+  * 控制器地址。 `_poolsByID` 用于迭代所有池。
+  *
+  * PoolRegistry 还包含一个名为“_supportedPools”的资产地址映射，它映射到每个池支持的资产数组。 这个池数组由
+  * 通过调用“getPoolsSupportedByAsset”来检索资产。
+  *
+  * PoolRegistry 使用 `createRegistryPool` 方法在目录中注册新的隔离池。 隔离池由独立市场组成
+  * 根据市场的特定资产和定制风险管理配置。
  */
 contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegistryInterface {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     struct AddMarketInput {
         VToken vToken;
-        uint256 collateralFactor;
-        uint256 liquidationThreshold;
+        uint256 collateralFactor;       // 抵押因素
+        uint256 liquidationThreshold;   // 清算门槛
         uint256 initialSupply;
         address vTokenReceiver;
         uint256 supplyCap;
         uint256 borrowCap;
     }
 
-    uint256 internal constant MAX_POOL_NAME_LENGTH = 100;
-
-    /**
-     * @notice Maps pool's comptroller address to metadata.
-     */
+ 
+    // Maps pool's comptroller address to metadata.
     mapping(address => VenusPoolMetaData) public metadata;
-
-    /**
-     * @dev Maps pool ID to pool's comptroller address
-     */
+    // Maps pool ID to pool's comptroller address
     mapping(uint256 => address) private _poolsByID;
-
-    /**
-     * @dev Total number of pools created.
-     */
-    uint256 private _numberOfPools;
-
-    /**
-     * @dev Maps comptroller address to Venus pool Index.
-     */
+    //Total number of pools created.
+    uint256 private _numberOfPools; 
+     // Maps comptroller address to Venus pool Index.
     mapping(address => VenusPool) private _poolByComptroller;
 
-    /**
-     * @dev Maps pool's comptroller address to asset to vToken.
-     */
-    mapping(address => mapping(address => address)) private _vTokens;
 
-    /**
-     * @dev Maps asset to list of supported pools.
-     */
+    // Maps pool's comptroller address to asset to vToken.
+    mapping(address => mapping(address => address)) private _vTokens;
+    // Maps asset to list of supported pools.
     mapping(address => address[]) private _supportedPools;
 
-    /**
-     * @notice Emitted when a new Venus pool is added to the directory.
-     */
+
+
+    // Emitted when a new Venus pool is added to the directory.
     event PoolRegistered(address indexed comptroller, VenusPool pool);
-
-    /**
-     * @notice Emitted when a pool name is set.
-     */
+    // Emitted when a pool name is set.
     event PoolNameSet(address indexed comptroller, string oldName, string newName);
-
-    /**
-     * @notice Emitted when a pool metadata is updated.
-     */
-    event PoolMetadataUpdated(
-        address indexed comptroller,
-        VenusPoolMetaData oldMetadata,
-        VenusPoolMetaData newMetadata
-    );
-
-    /**
-     * @notice Emitted when a Market is added to the pool.
-     */
+    // Emitted when a pool metadata is updated.
+    event PoolMetadataUpdated(address indexed comptroller,VenusPoolMetaData oldMetadata,VenusPoolMetaData newMetadata);
+    // Emitted when a Market is added to the pool.
     event MarketAdded(address indexed comptroller, address indexed vTokenAddress);
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
+
     constructor() {
-        // Note that the contract is upgradeable. Use initialize() or reinitializers
-        // to set the state variables.
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the deployer to owner
-     * @param accessControlManager_ AccessControlManager contract address
-     */
     function initialize(address accessControlManager_) external initializer {
         __Ownable2Step_init();
         __AccessControlled_init_unchained(accessControlManager_);
     }
 
     /**
-     * @notice Adds a new Venus pool to the directory
-     * @dev Price oracle must be configured before adding a pool
-     * @param name The name of the pool
-     * @param comptroller Pool's Comptroller contract
-     * @param closeFactor The pool's close factor (scaled by 1e18)
-     * @param liquidationIncentive The pool's liquidation incentive (scaled by 1e18)
-     * @param minLiquidatableCollateral Minimal collateral for regular (non-batch) liquidations flow
-     * @return index The index of the registered Venus pool
-     * @custom:error ZeroAddressNotAllowed is thrown when Comptroller address is zero
-     * @custom:error ZeroAddressNotAllowed is thrown when price oracle address is zero
+      添加一个新的 Venus 池到目录中
+      Price oracle 必须在添加池之前配置
+      name 池的名称
+      comptroller Pool 的 Comptroller 合约
+      closeFactor 池的关闭因子（按 1e18 缩放）
+      LiquidationIncentive 矿池的清算激励（按 1e18 缩放）
+      minLiquidatableCollateral 常规（非批量）清算流程的最小抵押品
      */
     function addPool(
         string calldata name,
@@ -138,13 +101,13 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
         uint256 minLiquidatableCollateral
     ) external virtual returns (uint256 index) {
         _checkAccessAllowed("addPool(string,address,uint256,uint256,uint256)");
-        // Input validation
         ensureNonzeroAddress(address(comptroller));
         ensureNonzeroAddress(address(comptroller.oracle()));
 
+        // 注册存储
         uint256 poolId = _registerPool(name, address(comptroller));
 
-        // Set Venus pool parameters
+        // 给comptroller设置参数
         comptroller.setCloseFactor(closeFactor);
         comptroller.setLiquidationIncentive(liquidationIncentive);
         comptroller.setMinLiquidatableCollateral(minLiquidatableCollateral);
@@ -155,9 +118,8 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
     /**
      * @notice Add a market to an existing pool and then mint to provide initial supply
      * @param input The structure describing the parameters for adding a market to a pool
-     * @custom:error ZeroAddressNotAllowed is thrown when vToken address is zero
-     * @custom:error ZeroAddressNotAllowed is thrown when vTokenReceiver address is zero
      */
+     // 在这里添加market - VToken
     function addMarket(AddMarketInput memory input) external {
         _checkAccessAllowed("addMarket(AddMarketInput)");
         ensureNonzeroAddress(address(input.vToken));
@@ -168,33 +130,34 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
         address vTokenAddress = address(vToken);
         address comptrollerAddress = address(vToken.comptroller());
         Comptroller comptroller = Comptroller(comptrollerAddress);
-        address underlyingAddress = vToken.underlying();
+        address underlyingAddress = vToken.underlying();    // 对应的代币
         IERC20Upgradeable underlying = IERC20Upgradeable(underlyingAddress);
 
         require(_poolByComptroller[comptrollerAddress].creator != address(0), "PoolRegistry: Pool not registered");
         // solhint-disable-next-line reason-string
-        require(
-            _vTokens[comptrollerAddress][underlyingAddress] == address(0),
-            "PoolRegistry: Market already added for asset comptroller combination"
-        );
+        require(_vTokens[comptrollerAddress][underlyingAddress] == address(0),"PoolRegistry: Market already added");
 
+
+        // comptroller 设置信息
         comptroller.supportMarket(vToken);
         comptroller.setCollateralFactor(vToken, input.collateralFactor, input.liquidationThreshold);
 
+        // comptroller 设置信息
         uint256[] memory newSupplyCaps = new uint256[](1);
         uint256[] memory newBorrowCaps = new uint256[](1);
         VToken[] memory vTokens = new VToken[](1);
-
         newSupplyCaps[0] = input.supplyCap;
         newBorrowCaps[0] = input.borrowCap;
         vTokens[0] = vToken;
-
         comptroller.setMarketSupplyCaps(vTokens, newSupplyCaps);
         comptroller.setMarketBorrowCaps(vTokens, newBorrowCaps);
 
+        // market存储
         _vTokens[comptrollerAddress][underlyingAddress] = vTokenAddress;
         _supportedPools[underlyingAddress].push(comptrollerAddress);
 
+        //初始化VToken的资金
+        //将代币转入VToken合约，并mint出vtoken给vTokenReceiver
         uint256 amountToSupply = _transferIn(underlying, msg.sender, input.initialSupply);
         underlying.approve(vTokenAddress, 0);
         underlying.approve(vTokenAddress, amountToSupply);
@@ -203,25 +166,17 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
         emit MarketAdded(comptrollerAddress, vTokenAddress);
     }
 
-    /**
-     * @notice Modify existing Venus pool name
-     * @param comptroller Pool's Comptroller
-     * @param name New pool name
-     */
+    // Modify existing Venus pool name
     function setPoolName(address comptroller, string calldata name) external {
         _checkAccessAllowed("setPoolName(address,string)");
-        _ensureValidName(name);
+       
         VenusPool storage pool = _poolByComptroller[comptroller];
         string memory oldName = pool.name;
         pool.name = name;
         emit PoolNameSet(comptroller, oldName, name);
     }
 
-    /**
-     * @notice Update metadata of an existing pool
-     * @param comptroller Pool's Comptroller
-     * @param metadata_ New pool metadata
-     */
+    // Update metadata of an existing pool
     function updatePoolMetadata(address comptroller, VenusPoolMetaData calldata metadata_) external {
         _checkAccessAllowed("updatePoolMetadata(address,VenusPoolMetaData)");
         VenusPoolMetaData memory oldMetadata = metadata[comptroller];
@@ -229,11 +184,7 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
         emit PoolMetadataUpdated(comptroller, oldMetadata, metadata_);
     }
 
-    /**
-     * @notice Returns arrays of all Venus pools' data
-     * @dev This function is not designed to be called in a transaction: it is too gas-intensive
-     * @return A list of all pools within PoolRegistry, with details for each pool
-     */
+   // Returns arrays of all Venus pools' data
     function getAllPools() external view override returns (VenusPool[] memory) {
         uint256 numberOfPools_ = _numberOfPools; // storage load to save gas
         VenusPool[] memory _pools = new VenusPool[](numberOfPools_);
@@ -243,42 +194,24 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
         }
         return _pools;
     }
-
-    /**
-     * @param comptroller The comptroller proxy address associated to the pool
-     * @return  Returns Venus pool
-     */
     function getPoolByComptroller(address comptroller) external view override returns (VenusPool memory) {
         return _poolByComptroller[comptroller];
     }
-
-    /**
-     * @param comptroller comptroller of Venus pool
-     * @return Returns Metadata of Venus pool
-     */
     function getVenusPoolMetadata(address comptroller) external view override returns (VenusPoolMetaData memory) {
         return metadata[comptroller];
     }
-
     function getVTokenForAsset(address comptroller, address asset) external view override returns (address) {
         return _vTokens[comptroller][asset];
     }
-
     function getPoolsSupportedByAsset(address asset) external view override returns (address[] memory) {
         return _supportedPools[asset];
     }
 
-    /**
-     * @dev Adds a new Venus pool to the directory (without checking msg.sender).
-     * @param name The name of the pool
-     * @param comptroller The pool's Comptroller proxy contract address
-     * @return The index of the registered Venus pool
-     */
+    //注册
     function _registerPool(string calldata name, address comptroller) internal returns (uint256) {
         VenusPool storage storedPool = _poolByComptroller[comptroller];
-
         require(storedPool.creator == address(0), "PoolRegistry: Pool already exists in the directory.");
-        _ensureValidName(name);
+       
 
         ++_numberOfPools;
         uint256 numberOfPools_ = _numberOfPools; // cache on stack to save storage read gas
@@ -299,7 +232,7 @@ contract PoolRegistry is Ownable2StepUpgradeable, AccessControlledV8, PoolRegist
         return balanceAfter - balanceBefore;
     }
 
-    function _ensureValidName(string calldata name) internal pure {
-        require(bytes(name).length <= MAX_POOL_NAME_LENGTH, "Pool's name is too large");
-    }
+
+
+
 }

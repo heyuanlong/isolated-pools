@@ -1,19 +1,19 @@
-### 线上合约列表
+# 线上合约列表
   https://docs-v4.venus.io/deployed-contracts/isolated-pools
   https://app.venus.io/#/isolated-pools
 
 
 
-### BNB Chain Mainnet
+# BNB Chain Mainnet
 
   - PoolRegistry: 0x9F7b01A536aFA00EF10310A162877fd792cD0666
   - PoolLens: 0x25E215CcE40bD849B7c286912B85212F984Ff1e0
   - DefaultProxyAdmin: 0x6beb6D2695B67FEb73ad4f172E8E2975497187e4
   - Comptroller Beacon: 0x38B4Efab9ea1bAcD19dC81f19c4D1C2F9DeAe1B2
   - VToken Beacon: 0x2b8A1C539ABaC89CbF7E2Bc6987A0A38A5e660D4
-  - 风险基金 RiskFund: 0xdF31a28D68A2AB381D42b380649Ead7ae2A76E42
-  - Shortfall: 0xf37530A8a810Fcb501AA0Ecd0B0699388F0F2209
-  - 协议共享保留 ProtocolShareReserve: 0xCa01D5A9A248a830E9D93231e791B1afFed7c446
+  - RiskFund: 0xdF31a28D68A2AB381D42b380649Ead7ae2A76E42                风险基金
+  - Shortfall: 0xf37530A8a810Fcb501AA0Ecd0B0699388F0F2209               坏账
+  - ProtocolShareReserve: 0xCa01D5A9A248a830E9D93231e791B1afFed7c446    协议共享保留
 
 ```
 
@@ -27,6 +27,11 @@ Pool GameFi
     vUSDT_GameFi: 0x4978591f17670A846137d9d613e333C38dc68A37
 
 ```
+# learn
+
+  - 在PoolRegistry注册池子和添加market，可看出PoolRegistry是个市场管理中心
+
+
 
 
 # Overview
