@@ -30,6 +30,8 @@ Pool GameFi
 # learn
 
   - 在PoolRegistry注册池子和添加market，可看出PoolRegistry是个市场管理中心
+  - PoolLens 检索每个注册矿池的重要信息
+  
 
 
 

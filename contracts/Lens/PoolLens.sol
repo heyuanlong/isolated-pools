@@ -15,33 +15,36 @@ import { RewardsDistributor } from "../Rewards/RewardsDistributor.sol";
 /**
  * @title PoolLens
  * @author Venus
- * @notice The `PoolLens` contract is designed to retrieve important information for each registered pool. A list of essential information
- * for all pools within the lending protocol can be acquired through the function `getAllPools()`. Additionally, the following records can be
- * looked up for specific pools and markets:
-- the vToken balance of a given user;
-- the pool data (oracle address, associated vToken, liquidation incentive, etc) of a pool via its associated comptroller address;
-- the vToken address in a pool for a given asset;
-- a list of all pools that support an asset;
-- the underlying asset price of a vToken;
-- the metadata (exchange/borrow/supply rate, total supply, collateral factor, etc) of any vToken.
+ * @notice “PoolLens”合约旨在检索每个注册矿池的重要信息。 重要信息列表
+  * 借贷协议中的所有池都可以通过函数“getAllPools()”获取。 另外，还可以记录以下内容：
+  * 查找特定池和市场：
+- 给定用户的 vToken 余额；
+- 通过关联的主计长地址获取矿池的矿池数据（预言机地址、关联的 vToken、清算激励等）；
+- 给定资产池中的 vToken 地址；
+- 支持资产的所有池的列表；
+- vToken 的基础资产价格；
+- 任何 vToken 的元数据（交换/借入/供应率、总供应量、抵押因素等）。
  */
 contract PoolLens is ExponentialNoError {
     /**
      * @dev Struct for PoolDetails.
      */
     struct PoolData {
+
         string name;
         address creator;
         address comptroller;
         uint256 blockPosted;
         uint256 timestampPosted;
+
         string category;
         string logoURL;
         string description;
-        address priceOracle;
-        uint256 closeFactor;
-        uint256 liquidationIncentive;
-        uint256 minLiquidatableCollateral;
+
+        address priceOracle;                // 预言机
+        uint256 closeFactor;                // 池的关闭因子（按 1e18 缩放）
+        uint256 liquidationIncentive;       // 矿池的清算激励（按 1e18 缩放）
+        uint256 minLiquidatableCollateral;  // 常规（非批量）清算流程的最小抵押品 
         VTokenMetadata[] vTokens;
     }
 
@@ -62,9 +65,9 @@ contract PoolLens is ExponentialNoError {
         uint256 totalCash;
         bool isListed;
         uint256 collateralFactorMantissa;
-        address underlyingAssetAddress;
+        address underlyingAssetAddress;     // 对应的代币
         uint256 vTokenDecimals;
-        uint256 underlyingDecimals;
+        uint256 underlyingDecimals;         // 代币的decimals
     }
 
     /**
