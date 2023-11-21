@@ -118,46 +118,15 @@ contract VToken is
         );
     }
 
-    /**
-     * @notice Transfer `amount` tokens from `msg.sender` to `dst`
-     * @param dst The address of the destination account
-     * @param amount The number of tokens to transfer
-     * @return success True if the transfer succeeded, reverts otherwise
-     * @custom:event Emits Transfer event on success
-     * @custom:error TransferNotAllowed is thrown if trying to transfer to self
-     * @custom:access Not restricted
-     */
+
     function transfer(address dst, uint256 amount) external override nonReentrant returns (bool) {
         _transferTokens(msg.sender, msg.sender, dst, amount);
         return true;
     }
-
-    /**
-     * @notice Transfer `amount` tokens from `src` to `dst`
-     * @param src The address of the source account
-     * @param dst The address of the destination account
-     * @param amount The number of tokens to transfer
-     * @return success True if the transfer succeeded, reverts otherwise
-     * @custom:event Emits Transfer event on success
-     * @custom:error TransferNotAllowed is thrown if trying to transfer to self
-     * @custom:access Not restricted
-     */
     function transferFrom(address src, address dst, uint256 amount) external override nonReentrant returns (bool) {
         _transferTokens(msg.sender, src, dst, amount);
         return true;
     }
-
-    /**
-     * @notice Approve `spender` to transfer up to `amount` from `src`
-     * @dev This will overwrite the approval amount for `spender`
-     *  and is subject to issues noted [here](https://eips.ethereum.org/EIPS/eip-20#approve)
-     * @param spender The address of the account which may transfer tokens
-     * @param amount The number of tokens that are approved (uint256.max means infinite)
-     * @return success Whether or not the approval succeeded
-     * @custom:event Emits Approval event
-     * @custom:access Not restricted
-     * @custom:error ZeroAddressNotAllowed is thrown when spender address is zero
-     */
     function approve(address spender, uint256 amount) external override returns (bool) {
         ensureNonzeroAddress(spender);
 
@@ -166,16 +135,6 @@ contract VToken is
         emit Approval(src, spender, amount);
         return true;
     }
-
-    /**
-     * @notice Increase approval for `spender`
-     * @param spender The address of the account which may transfer tokens
-     * @param addedValue The number of additional tokens spender can transfer
-     * @return success Whether or not the approval succeeded
-     * @custom:event Emits Approval event
-     * @custom:access Not restricted
-     * @custom:error ZeroAddressNotAllowed is thrown when spender address is zero
-     */
     function increaseAllowance(address spender, uint256 addedValue) external override returns (bool) {
         ensureNonzeroAddress(spender);
 
@@ -187,16 +146,6 @@ contract VToken is
         emit Approval(src, spender, newAllowance);
         return true;
     }
-
-    /**
-     * @notice Decreases approval for `spender`
-     * @param spender The address of the account which may transfer tokens
-     * @param subtractedValue The number of tokens to remove from total approval
-     * @return success Whether or not the approval succeeded
-     * @custom:event Emits Approval event
-     * @custom:access Not restricted
-     * @custom:error ZeroAddressNotAllowed is thrown when spender address is zero
-     */
     function decreaseAllowance(address spender, uint256 subtractedValue) external override returns (bool) {
         ensureNonzeroAddress(spender);
 
@@ -213,140 +162,67 @@ contract VToken is
         return true;
     }
 
-    /**
-     * @notice Get the underlying balance of the `owner`
-     * @dev This also accrues interest in a transaction
-     * @param owner The address of the account to query
-     * @return amount The amount of underlying owned by `owner`
-     */
+    // vtoken * exchangeRate = asset
     function balanceOfUnderlying(address owner) external override returns (uint256) {
         Exp memory exchangeRate = Exp({ mantissa: exchangeRateCurrent() });
         return mul_ScalarTruncate(exchangeRate, accountTokens[owner]);
     }
-
-    /**
-     * @notice Returns the current total borrows plus accrued interest
-     * @return totalBorrows The total borrows with interest
-     */
     function totalBorrowsCurrent() external override nonReentrant returns (uint256) {
         accrueInterest();
         return totalBorrows;
     }
 
-    /**
-     * @notice Accrue interest to updated borrowIndex and then calculate account's borrow balance using the updated borrowIndex
-     * @param account The address whose balance should be calculated after updating borrowIndex
-     * @return borrowBalance The calculated balance
-     */
+
+    // The address whose balance should be calculated after updating borrowIndex
+    // 计算个人的最新借款本息
     function borrowBalanceCurrent(address account) external override nonReentrant returns (uint256) {
         accrueInterest();
         return _borrowBalanceStored(account);
     }
 
-    /**
-     * @notice Sender supplies assets into the market and receives vTokens in exchange
-     * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param mintAmount The amount of the underlying asset to supply
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits Mint and Transfer events; may emit AccrueInterest
-     * @custom:access Not restricted
-     */
+    // vtoken =  asset / exchangeRate
     function mint(uint256 mintAmount) external override nonReentrant returns (uint256) {
         accrueInterest();
-        // _mintFresh emits the actual Mint event if successful and logs on errors, so we don't need to
         _mintFresh(msg.sender, msg.sender, mintAmount);
         return NO_ERROR;
     }
-
-    /**
-     * @notice Sender calls on-behalf of minter. minter supplies assets into the market and receives vTokens in exchange
-     * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param minter User whom the supply will be attributed to
-     * @param mintAmount The amount of the underlying asset to supply
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits Mint and Transfer events; may emit AccrueInterest
-     * @custom:access Not restricted
-     * @custom:error ZeroAddressNotAllowed is thrown when minter address is zero
-     */
     function mintBehalf(address minter, uint256 mintAmount) external override nonReentrant returns (uint256) {
         ensureNonzeroAddress(minter);
 
         accrueInterest();
-        // _mintFresh emits the actual Mint event if successful and logs on errors, so we don't need to
         _mintFresh(msg.sender, minter, mintAmount);
         return NO_ERROR;
     }
 
-    /**
-     * @notice Sender redeems vTokens in exchange for the underlying asset
-     * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemTokens The number of vTokens to redeem into underlying
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits Redeem and Transfer events; may emit AccrueInterest
-     * @custom:error RedeemTransferOutNotPossible is thrown when the protocol has insufficient cash
-     * @custom:access Not restricted
-     */
+    // asset = vtoken * exchangeRate
     function redeem(uint256 redeemTokens) external override nonReentrant returns (uint256) {
         accrueInterest();
-        // _redeemFresh emits redeem-specific logs on errors, so we don't need to
         _redeemFresh(msg.sender, redeemTokens, 0);
         return NO_ERROR;
     }
-
-    /**
-     * @notice Sender redeems vTokens in exchange for a specified amount of underlying asset
-     * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemAmount The amount of underlying to receive from redeeming vTokens
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     */
     function redeemUnderlying(uint256 redeemAmount) external override nonReentrant returns (uint256) {
         accrueInterest();
-        // _redeemFresh emits redeem-specific logs on errors, so we don't need to
         _redeemFresh(msg.sender, 0, redeemAmount);
         return NO_ERROR;
     }
 
-        /**
-      * @notice 发送者从协议中借用资产到自己的地址
-      * @param borrowAmount 借入标的资产金额
-      * @return error 始终为 NO_ERROR 以与 Venus 核心工具兼容
-      * @custom:event 发出借用事件； 可能会发出 AccrueInterest
-      * @custom:当协议现金不足时抛出错误 BorrowCashNotAvailable
-      * @custom:访问不受限
-      */
+    // 发送者从协议中借用资产到自己的地址
+    // borrowAmount 借入标的资产金额
     function borrow(uint256 borrowAmount) external override nonReentrant returns (uint256) {
         //先更新累计利率
         accrueInterest();
-        // borrowFresh emits borrow-specific logs on errors, so we don't need to
         _borrowFresh(msg.sender, borrowAmount);
         return NO_ERROR;
     }
 
-    /**
-     * @notice Sender repays their own borrow
-     * @param repayAmount The amount to repay, or type(uint256).max for the full outstanding amount
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits RepayBorrow event; may emit AccrueInterest
-     * @custom:access Not restricted
-     */
+    // 还款
     function repayBorrow(uint256 repayAmount) external override nonReentrant returns (uint256) {
         accrueInterest();
-        // _repayBorrowFresh emits repay-borrow-specific logs on errors, so we don't need to
         _repayBorrowFresh(msg.sender, msg.sender, repayAmount);
         return NO_ERROR;
     }
-
-    /**
-     * @notice Sender repays a borrow belonging to borrower
-     * @param borrower the account with the debt being payed off
-     * @param repayAmount The amount to repay, or type(uint256).max for the full outstanding amount
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits RepayBorrow event; may emit AccrueInterest
-     * @custom:access Not restricted
-     */
     function repayBorrowBehalf(address borrower, uint256 repayAmount) external override nonReentrant returns (uint256) {
         accrueInterest();
-        // _repayBorrowFresh emits repay-borrow-specific logs on errors, so we don't need to
         _repayBorrowFresh(msg.sender, borrower, repayAmount);
         return NO_ERROR;
     }
@@ -792,6 +668,9 @@ contract VToken is
       * @param minter 提供资产的账户地址
       * @param mintAmount 提供的基础资产数量
       */
+
+    // exchangeRate = (totalCash + totalBorrows + badDebt - totalReserves) / totalSupply
+    // mintTokens = actualMintAmount / exchangeRate
     function _mintFresh(address payer, address minter, uint256 mintAmount) internal {
         /* Fail if mint not allowed */
         comptroller.preMintHook(address(this), minter, mintAmount);
@@ -802,19 +681,9 @@ contract VToken is
             revert MintFreshnessCheck();
         }
 
+        // exchangeRate = (totalCash + totalBorrows + badDebt - totalReserves) / totalSupply
         Exp memory exchangeRate = Exp({ mantissa: _exchangeRateStored() });
 
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /*
-         *  We call `_doTransferIn` for the minter and the mintAmount.
-         *  `_doTransferIn` reverts if anything goes wrong, since we can't be sure if
-         *  side-effects occurred. The function returns the amount actually transferred,
-         *  in case of a fee. On success, the vToken holds an additional `actualMintAmount`
-         *  of cash.
-         */
         uint256 actualMintAmount = _doTransferIn(payer, mintAmount);
         // We get the current exchange rate and calculate the number of vTokens to be minted:
         // mintTokens = actualMintAmount / exchangeRate
@@ -844,8 +713,6 @@ contract VToken is
      */
     function _redeemFresh(address redeemer, uint256 redeemTokensIn, uint256 redeemAmountIn) internal {
         require(redeemTokensIn == 0 || redeemAmountIn == 0, "one of redeemTokensIn or redeemAmountIn must be zero");
-
-        /* Verify market's block number equals current block number */
         if (accrualBlockNumber != _getBlockNumber()) {
             revert RedeemFreshnessCheck();
         }
@@ -858,10 +725,6 @@ contract VToken is
 
         /* If redeemTokensIn > 0: */
         if (redeemTokensIn > 0) {
-            /*
-             * We calculate the exchange rate and the amount of underlying to be redeemed:
-             *  redeemTokens = redeemTokensIn
-             */
             redeemTokens = redeemTokensIn;
         } else {
             /*
@@ -890,26 +753,12 @@ contract VToken is
             revert RedeemTransferOutNotPossible();
         }
 
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
 
-        /*
-         * We write the previously calculated values into storage.
-         *  Note: Avoid token reentrancy attacks by writing reduced supply before external transfer.
-         */
         totalSupply = totalSupply - redeemTokens;
         uint256 balanceAfter = accountTokens[redeemer] - redeemTokens;
         accountTokens[redeemer] = balanceAfter;
-
-        /*
-         * We invoke _doTransferOut for the redeemer and the redeemAmount.
-         *  On success, the vToken has redeemAmount less of cash.
-         *  _doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         */
+  
         _doTransferOut(redeemer, redeemAmount);
-
-        /* We emit a Transfer event, and a Redeem event */
         emit Transfer(redeemer, address(this), redeemTokens);
         emit Redeem(redeemer, redeemAmount, redeemTokens, balanceAfter);
     }
@@ -921,6 +770,7 @@ contract VToken is
      */
     function _borrowFresh(address borrower, uint256 borrowAmount) internal {
         comptroller.preBorrowHook(address(this), borrower, borrowAmount);
+
         if (accrualBlockNumber != _getBlockNumber()) {
             revert BorrowFreshnessCheck();
         }
@@ -981,27 +831,13 @@ contract VToken is
         }
 
         /* We fetch the amount the borrower owes, with accumulated interest */
+        // 计算个人的最新借款本息，个人最新借款本息也就是个人最新借款总额
         uint256 accountBorrowsPrev = _borrowBalanceStored(borrower);
-
+        // 还款额度确定
         uint256 repayAmountFinal = repayAmount >= accountBorrowsPrev ? accountBorrowsPrev : repayAmount;
-
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /*
-         * We call _doTransferIn for the payer and the repayAmount
-         *  On success, the vToken holds an additional repayAmount of cash.
-         *  _doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         *   it returns the amount actually transferred, in case of a fee.
-         */
         uint256 actualRepayAmount = _doTransferIn(payer, repayAmountFinal);
 
-        /*
-         * We calculate the new borrower and total borrow balances, failing on underflow:
-         *  accountBorrowsNew = accountBorrows - actualRepayAmount
-         *  totalBorrowsNew = totalBorrows - actualRepayAmount
-         */
+        // We calculate the new borrower and total borrow balances, failing on underflow:
         uint256 accountBorrowsNew = accountBorrowsPrev - actualRepayAmount;
         uint256 totalBorrowsNew = totalBorrows - actualRepayAmount;
 
@@ -1010,9 +846,7 @@ contract VToken is
         accountBorrows[borrower].interestIndex = borrowIndex;
         totalBorrows = totalBorrowsNew;
 
-        /* We emit a RepayBorrow event */
         emit RepayBorrow(payer, borrower, actualRepayAmount, accountBorrowsNew, totalBorrowsNew);
-
         return actualRepayAmount;
     }
 

@@ -2,10 +2,6 @@
   https://docs-v4.venus.io/deployed-contracts/isolated-pools
   https://app.venus.io/#/isolated-pools
 
-# 文档
-  累计利率计算方式  https://learnblockchain.cn/article/5036
-
-
 # BNB Chain Mainnet
 
   - PoolRegistry: 0x9F7b01A536aFA00EF10310A162877fd792cD0666
@@ -29,10 +25,19 @@ Pool GameFi
     vUSDT_GameFi: 0x4978591f17670A846137d9d613e333C38dc68A37
 
 ```
+
+
+# 文档
+  累计利率计算方式  https://learnblockchain.cn/article/5036
+
+
 # learn
 
   - 在PoolRegistry注册池子和添加market，可看出PoolRegistry是个市场管理中心
   - PoolLens 检索每个注册矿池的重要信息
+  - 存入资产，mint VToken，是根据exchangeRate兑换的。
+  - 每次借款的时候，会先计算并存储最新借款的本息，让存储最新的累计利率。(跟持币生息的原理差不多)
+
   
 
 
