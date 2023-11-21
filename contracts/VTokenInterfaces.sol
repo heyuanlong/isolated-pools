@@ -15,10 +15,10 @@ import { InterestRateModel } from "./InterestRateModel.sol";
 // solhint-disable-next-line max-states-count
 contract VTokenStorage {
     /**
-     * @notice Container for borrow balance information
-     * @member principal Total balance (with accrued interest), after applying the most recent balance-changing action
-     * @member interestIndex Global borrowIndex as of the most recent balance-changing action
-     */
+      * @notice 借用余额信息的容器
+      * @member principal 应用最近的余额更改操作后的总余额（含应计利息）
+      * @member interestIndex Global borrowIndex as of the most recent balance-changing action
+      */
     struct BorrowSnapshot {
         uint256 principal;
         uint256 interestIndex;
@@ -57,7 +57,7 @@ contract VTokenStorage {
     // Maximum borrow rate that can ever be applied (.0005% / block)
     uint256 internal constant MAX_BORROW_RATE_MANTISSA = 0.0005e16;
 
-    // Maximum fraction of interest that can be set aside for reserves
+    // Maximum fraction of interest that can be set aside for reserves/储备
     uint256 internal constant MAX_RESERVE_FACTOR_MANTISSA = 1e18;
 
     /**

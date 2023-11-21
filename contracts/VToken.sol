@@ -306,15 +306,16 @@ contract VToken is
         return NO_ERROR;
     }
 
-    /**
-     * @notice Sender borrows assets from the protocol to their own address
-     * @param borrowAmount The amount of the underlying asset to borrow
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits Borrow event; may emit AccrueInterest
-     * @custom:error BorrowCashNotAvailable is thrown when the protocol has insufficient cash
-     * @custom:access Not restricted
-     */
+        /**
+      * @notice 发送者从协议中借用资产到自己的地址
+      * @param borrowAmount 借入标的资产金额
+      * @return error 始终为 NO_ERROR 以与 Venus 核心工具兼容
+      * @custom:event 发出借用事件； 可能会发出 AccrueInterest
+      * @custom:当协议现金不足时抛出错误 BorrowCashNotAvailable
+      * @custom:访问不受限
+      */
     function borrow(uint256 borrowAmount) external override nonReentrant returns (uint256) {
+        //先更新累计利率
         accrueInterest();
         // borrowFresh emits borrow-specific logs on errors, so we don't need to
         _borrowFresh(msg.sender, borrowAmount);
@@ -707,13 +708,14 @@ contract VToken is
     }
 
     /**
-     * @notice Applies accrued interest to total borrows and reserves
-     * @dev This calculates interest accrued from the last checkpointed block
-     *   up to the current block and writes new checkpoint to storage.
-     * @return Always NO_ERROR
-     * @custom:event Emits AccrueInterest event on success
-     * @custom:access Not restricted
-     */
+      * @notice 将应计利息应用于总借款和准备金
+      * @dev 这计算从最后一个检查点块产生的利息
+      * 直到当前块并将新的检查点写入存储。
+      * @return 始终为 NO_ERROR
+      * @custom:event 成功时发出 AccrueInterest 事件
+      * @custom:访问不受限
+      */
+     // 更新累计利率
     function accrueInterest() public virtual override returns (uint256) {
         /* Remember the initial block number */
         uint256 currentBlockNumber = _getBlockNumber();
@@ -731,6 +733,7 @@ contract VToken is
         uint256 borrowIndexPrior = borrowIndex;
 
         /* Calculate the current borrow interest rate */
+        //根据现金流、总借款totalBorrows、总储备金totalReserves,badDebt 从利率模型中获取区块利率
         uint256 borrowRateMantissa = interestRateModel.getBorrowRate(cashPrior, borrowsPrior, reservesPrior, badDebt);
         require(borrowRateMantissa <= MAX_BORROW_RATE_MANTISSA, "borrow rate is absurdly high");
 
@@ -746,6 +749,7 @@ contract VToken is
          *  borrowIndexNew = simpleInterestFactor * borrowIndex + borrowIndex
          */
 
+
         Exp memory simpleInterestFactor = mul_(Exp({ mantissa: borrowRateMantissa }), blockDelta);
         uint256 interestAccumulated = mul_ScalarTruncate(simpleInterestFactor, borrowsPrior);
         uint256 totalBorrowsNew = interestAccumulated + borrowsPrior;
@@ -754,6 +758,8 @@ contract VToken is
             interestAccumulated,
             reservesPrior
         );
+
+        // 更新累积利率：  最新 borrowIndex= 上一个borrowIndex*（1+borrowRate）
         uint256 borrowIndexNew = mul_ScalarTruncateAddUInt(simpleInterestFactor, borrowIndexPrior, borrowIndexPrior);
 
         /////////////////////////
@@ -761,10 +767,17 @@ contract VToken is
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        accrualBlockNumber = currentBlockNumber;
-        borrowIndex = borrowIndexNew;
+        
+        accrualBlockNumber = currentBlockNumber;        // 更新计息时间
+        borrowIndex = borrowIndexNew;                   // 更新累积利率
         totalBorrows = totalBorrowsNew;
         totalReserves = totalReservesNew;
+
+        // 更新总借款，总借款=总借款+利息=总借款+总借款*利率=总借款*（1+利率）
+        // totalBorrows = totalBorrows*(1+borrowRate);
+        // 更新总储备金
+        // totalReserves =totalReserves+ borrowRate*totalBorrows*reserveFactor;
+
 
         /* We emit an AccrueInterest event */
         emit AccrueInterest(cashPrior, interestAccumulated, borrowIndexNew, totalBorrowsNew);
@@ -773,17 +786,18 @@ contract VToken is
     }
 
     /**
-     * @notice User supplies assets into the market and receives vTokens in exchange
-     * @dev Assumes interest has already been accrued up to the current block
-     * @param payer The address of the account which is sending the assets for supply
-     * @param minter The address of the account which is supplying the assets
-     * @param mintAmount The amount of the underlying asset to supply
-     */
+      * @notice 用户向市场提供资产并接收 vToken 作为交换
+      * @dev 假设利息已经累积到当前区块
+      * @param payer 发送资产供供应的账户地址
+      * @param minter 提供资产的账户地址
+      * @param mintAmount 提供的基础资产数量
+      */
     function _mintFresh(address payer, address minter, uint256 mintAmount) internal {
         /* Fail if mint not allowed */
         comptroller.preMintHook(address(this), minter, mintAmount);
 
         /* Verify market's block number equals current block number */
+        // 确保执行过 accrueInterest(); 了
         if (accrualBlockNumber != _getBlockNumber()) {
             revert MintFreshnessCheck();
         }
@@ -802,12 +816,8 @@ contract VToken is
          *  of cash.
          */
         uint256 actualMintAmount = _doTransferIn(payer, mintAmount);
-
-        /*
-         * We get the current exchange rate and calculate the number of vTokens to be minted:
-         *  mintTokens = actualMintAmount / exchangeRate
-         */
-
+        // We get the current exchange rate and calculate the number of vTokens to be minted:
+        // mintTokens = actualMintAmount / exchangeRate
         uint256 mintTokens = div_(actualMintAmount, exchangeRate);
 
         /*
@@ -910,10 +920,7 @@ contract VToken is
      * @param borrowAmount The amount of the underlying asset to borrow
      */
     function _borrowFresh(address borrower, uint256 borrowAmount) internal {
-        /* Fail if borrow not allowed */
         comptroller.preBorrowHook(address(this), borrower, borrowAmount);
-
-        /* Verify market's block number equals current block number */
         if (accrualBlockNumber != _getBlockNumber()) {
             revert BorrowFreshnessCheck();
         }
@@ -928,7 +935,9 @@ contract VToken is
          *  accountBorrowNew = accountBorrow + borrowAmount
          *  totalBorrowsNew = totalBorrows + borrowAmount
          */
-        uint256 accountBorrowsPrev = _borrowBalanceStored(borrower);
+        // 计算个人的最新借款本息，个人最新借款本息也就是个人最新借款总额
+        uint256 accountBorrowsPrev = _borrowBalanceStored(borrower); 
+
         uint256 accountBorrowsNew = accountBorrowsPrev + borrowAmount;
         uint256 totalBorrowsNew = totalBorrows + borrowAmount;
 
@@ -1462,17 +1471,14 @@ contract VToken is
     }
 
     /**
-     * @notice Return the borrow balance of account based on stored data
-     * @param account The address whose balance should be calculated
-     * @return borrowBalance the calculated balance
-     */
+      * @notice 根据存储的数据返回账户的借入余额
+      * @param account 需要计算余额的地址
+      * @return borrowBalance 计算出的余额
+      */
+    // 计算个人的最新本息
     function _borrowBalanceStored(address account) internal view returns (uint256) {
         /* Get borrowBalance and borrowIndex */
         BorrowSnapshot memory borrowSnapshot = accountBorrows[account];
-
-        /* If borrowBalance = 0 then borrowIndex is likely also 0.
-         * Rather than failing the calculation with a division by 0, we immediately return 0 in this case.
-         */
         if (borrowSnapshot.principal == 0) {
             return 0;
         }
@@ -1480,8 +1486,8 @@ contract VToken is
         /* Calculate new borrow balance using the interest index:
          *  recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
          */
+        // 本息 = 本金 * 当前累计利率 / 借款时累积利率
         uint256 principalTimesIndex = borrowSnapshot.principal * borrowIndex;
-
         return principalTimesIndex / borrowSnapshot.interestIndex;
     }
 
