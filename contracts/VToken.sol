@@ -15,31 +15,30 @@ import { IProtocolShareReserve } from "./RiskFund/IProtocolShareReserve.sol";
 import { ensureNonzeroAddress } from "./lib/validators.sol";
 
 /**
- * @title VToken
- * @author Venus
- * @notice Each asset that is supported by a pool is integrated through an instance of the `VToken` contract. As outlined in the protocol overview,
- * each isolated pool creates its own `vToken` corresponding to an asset. Within a given pool, each included `vToken` is referred to as a market of
- * the pool. The main actions a user regularly interacts with in a market are:
+  * @notice 池支持的每个资产都是通过“VToken”合约的实例集成的。 正如协议概述中所述，
+  * 每个隔离池都会创建自己的与资产相对应的“vToken”。 在给定池中，每个包含的“vToken”被称为一个市场
+  * 游泳池。 用户在市场中经常互动的主要行为是：
 
-- mint/redeem of vTokens;
-- transfer of vTokens;
-- borrow/repay a loan on an underlying asset;
-- liquidate a borrow or liquidate/heal an account.
+    - vToken 的铸造/赎回；
+    - vToken 的转移；
+    - 借入/偿还标的资产的贷款；
+    - 清算借款或清算/修复帐户。
 
- * A user supplies the underlying asset to a pool by minting `vTokens`, where the corresponding `vToken` amount is determined by the `exchangeRate`.
- * The `exchangeRate` will change over time, dependent on a number of factors, some of which accrue interest. Additionally, once users have minted
- * `vToken` in a pool, they can borrow any asset in the isolated pool by using their `vToken` as collateral. In order to borrow an asset or use a `vToken`
- * as collateral, the user must be entered into each corresponding market (else, the `vToken` will not be considered collateral for a borrow). Note that
- * a user may borrow up to a portion of their collateral determined by the market’s collateral factor. However, if their borrowed amount exceeds an amount
- * calculated using the market’s corresponding liquidation threshold, the borrow is eligible for liquidation. When a user repays a borrow, they must also
- * pay off interest accrued on the borrow.
- * 
- * The Venus protocol includes unique mechanisms for healing an account and liquidating an account. These actions are performed in the `Comptroller`
- * and consider all borrows and collateral for which a given account is entered within a market. These functions may only be called on an account with a
- * total collateral amount that is no larger than a universal `minLiquidatableCollateral` value, which is used for all markets within a `Comptroller`.
- * Both functions settle all of an account’s borrows, but `healAccount()` may add `badDebt` to a vToken. For more detail, see the description of
- * `healAccount()` and `liquidateAccount()` in the `Comptroller` summary section below.
- */
+  * 用户通过铸造“vToken”向池中提供基础资产，其中相应的“vToken”数量由“exchangeRate”决定。
+  * “汇率”会随着时间的推移而变化，取决于多种因素，其中一些因素会产生利息。 此外，一旦用户铸造了
+  * 池中的“vToken”，他们可以使用“vToken”作为抵押借入隔离池中的任何资产。 为了借用资产或使用“vToken”
+  * 作为抵押品，用户必须进入每个相应的市场（否则，“vToken”将不会被视为借入的抵押品）。 注意
+  * 用户最多可以借用部分抵押品，具体取决于市场的抵押品因素。 但是，如果他们借的金额超过
+  * 使用市场相应的清算门槛计算，借款符合清算资格。 当用户偿还借款时，他们还必须
+  * 偿还借款应计利息。
+  *
+  * Venus 协议包括用于修复帐户和清算帐户的独特机制。 这些操作在“Comptroller”中执行
+  * 并考虑给定账户进入市场的所有借款和抵押品。 这些函数只能在具有以下权限的帐户上调用
+  * 抵押品总额不大于通用的“minLiquidatableCollateral”值，该值用于“Comptroller”内的所有市场。
+  * 这两个函数都可以结算账户的所有借款，但是 `healAccount()` 可能会将 `badDebt` 添加到 vToken。 更详细的内容请参见说明
+  * 下面“Comptroller”摘要部分中的“healAccount()”和“liquidateAccount()”。
+  */
+  
 contract VToken is
     Ownable2StepUpgradeable,
     AccessControlledV8,
@@ -51,11 +50,6 @@ contract VToken is
 
     uint256 internal constant DEFAULT_PROTOCOL_SEIZE_SHARE_MANTISSA = 5e16; // 5%
 
-    /*** Reentrancy Guard ***/
-
-    /**
-     * @dev Prevents a contract from calling itself, directly or indirectly.
-     */
     modifier nonReentrant() {
         require(_notEntered, "re-entered");
         _notEntered = false;
@@ -70,23 +64,19 @@ contract VToken is
         _disableInitializers();
     }
 
-    /**
-     * @notice Construct a new money market
-     * @param underlying_ The address of the underlying asset
-     * @param comptroller_ The address of the Comptroller
-     * @param interestRateModel_ The address of the interest rate model
-     * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
-     * @param name_ ERC-20 name of this token
-     * @param symbol_ ERC-20 symbol of this token
-     * @param decimals_ ERC-20 decimal precision of this token
-     * @param admin_ Address of the administrator of this token
-     * @param accessControlManager_ AccessControlManager contract address
-     * @param riskManagement Addresses of risk & income related contracts
-     * @param reserveFactorMantissa_ Percentage of borrow interest that goes to reserves (from 0 to 1e18)
-     * @custom:error ZeroAddressNotAllowed is thrown when admin address is zero
-     * @custom:error ZeroAddressNotAllowed is thrown when shortfall contract address is zero
-     * @custom:error ZeroAddressNotAllowed is thrown when protocol share reserve address is zero
-     */
+    /** @notice 构建新的货币市场
+       underlying_ 标的资产的地址
+       comptroller_ Comptroller的地址
+       interestRateModel_ 利率模型的地址
+       initialExchangeRateMantissa_ 初始汇率，按 1e18 缩放
+       name_ 该代币的ERC-20名称
+       symbol_ 该代币的ERC-20符号
+       Decimals_ 该代币的 ERC-20 小数精度
+       admin_ 该token的管理员地址
+       accessControlManager_ AccessControlManager合约地址
+       riskManagement 风险和收入相关合约的地址
+       ReserveFactorMantissa_ 转入准备金的借入利息百分比（从 0 到 1e18）
+      */
     function initialize(
         address underlying_,
         ComptrollerInterface comptroller_,
@@ -336,13 +326,12 @@ contract VToken is
         emit HealBorrow(payer, borrower, repayAmount);
     }
 
-      /**
-      * @notice 清算的扩展版本，只能由审计长调用。 可以跳过接近因素检查。 扣押的抵押品将转移给清算人。
-      * @param Liquidator 偿还借款并扣押抵押品的地址
-      * @param borrower 该vToken将被清算的借款人
-      * @param repayAmount 标的借入资产需要偿还的金额
-      * @param vTokenCollateral 从借款人手中夺取抵押品的市场
-      * @param skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
+      /** @notice 清算的扩展版本，只能由审计长调用。 可以跳过接近因素检查。 扣押的抵押品将转移给清算人。
+      - Liquidator 偿还借款并扣押抵押品的地址
+      - borrower 该vToken将被清算的借款人
+      - repayAmount 标的借入资产需要偿还的金额
+      - vTokenCollateral 从借款人手中夺取抵押品的市场
+      - skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
         与账户流动性无关
       */
     function forceLiquidateBorrow(
@@ -457,9 +446,6 @@ contract VToken is
       * @notice 将应计利息应用于总借款和准备金
       * @dev 这计算从最后一个检查点块产生的利息
       * 直到当前块并将新的检查点写入存储。
-      * @return 始终为 NO_ERROR
-      * @custom:event 成功时发出 AccrueInterest 事件
-      * @custom:访问不受限
       */
      // 更新累计利率
     function accrueInterest() public virtual override returns (uint256) {
@@ -528,7 +514,6 @@ contract VToken is
       * @param minter 提供资产的账户地址
       * @param mintAmount 提供的基础资产数量
       */
-
     // exchangeRate = (totalCash + totalBorrows + badDebt - totalReserves) / totalSupply
     // mintTokens = actualMintAmount / exchangeRate
     function _mintFresh(address payer, address minter, uint256 mintAmount) internal {
@@ -543,34 +528,19 @@ contract VToken is
 
         // exchangeRate = (totalCash + totalBorrows + badDebt - totalReserves) / totalSupply
         Exp memory exchangeRate = Exp({ mantissa: _exchangeRateStored() });
-
         uint256 actualMintAmount = _doTransferIn(payer, mintAmount);
-        // We get the current exchange rate and calculate the number of vTokens to be minted:
-        // mintTokens = actualMintAmount / exchangeRate
         uint256 mintTokens = div_(actualMintAmount, exchangeRate);
 
-        /*
-         * We calculate the new total supply of vTokens and minter token balance, checking for overflow:
-         *  totalSupplyNew = totalSupply + mintTokens
-         *  accountTokensNew = accountTokens[minter] + mintTokens
-         * And write them into storage
-         */
+        //更新totalSupply和个人token余额
         totalSupply = totalSupply + mintTokens;
         uint256 balanceAfter = accountTokens[minter] + mintTokens;
         accountTokens[minter] = balanceAfter;
 
-        /* We emit a Mint event, and a Transfer event */
         emit Mint(minter, actualMintAmount, mintTokens, balanceAfter);
         emit Transfer(address(0), minter, mintTokens);
     }
 
-    /**
-     * @notice User redeems vTokens in exchange for the underlying asset
-     * @dev Assumes interest has already been accrued up to the current block
-     * @param redeemer The address of the account which is redeeming the tokens
-     * @param redeemTokensIn The number of vTokens to redeem into underlying (only one of redeemTokensIn or redeemAmountIn may be non-zero)
-     * @param redeemAmountIn The number of underlying tokens to receive from redeeming vTokens (only one of redeemTokensIn or redeemAmountIn may be non-zero)
-     */
+    // 赎回代币
     function _redeemFresh(address redeemer, uint256 redeemTokensIn, uint256 redeemAmountIn) internal {
         require(redeemTokensIn == 0 || redeemAmountIn == 0, "one of redeemTokensIn or redeemAmountIn must be zero");
         if (accrualBlockNumber != _getBlockNumber()) {
@@ -579,28 +549,21 @@ contract VToken is
 
         /* exchangeRate = invoke Exchange Rate Stored() */
         Exp memory exchangeRate = Exp({ mantissa: _exchangeRateStored() });
-
         uint256 redeemTokens;
         uint256 redeemAmount;
 
-        /* If redeemTokensIn > 0: */
         if (redeemTokensIn > 0) {
             redeemTokens = redeemTokensIn;
         } else {
-            /*
-             * We get the current exchange rate and calculate the amount to be redeemed:
-             *  redeemTokens = redeemAmountIn / exchangeRate
-             */
+            // We get the current exchange rate and calculate the amount to be redeemed:
+            // redeemTokens = redeemAmountIn / exchangeRate
             redeemTokens = div_(redeemAmountIn, exchangeRate);
-
             uint256 _redeemAmount = mul_(redeemTokens, exchangeRate);
             if (_redeemAmount != 0 && _redeemAmount != redeemAmountIn) redeemTokens++; // round up
         }
 
         // redeemAmount = exchangeRate * redeemTokens
         redeemAmount = mul_ScalarTruncate(exchangeRate, redeemTokens);
-
-        // Revert if amount is zero
         if (redeemAmount == 0) {
             revert("redeemAmount is zero");
         }
@@ -623,19 +586,13 @@ contract VToken is
         emit Redeem(redeemer, redeemAmount, redeemTokens, balanceAfter);
     }
 
-    /**
-     * @notice Users borrow assets from the protocol to their own address
-     * @param borrower User who borrows the assets
-     * @param borrowAmount The amount of the underlying asset to borrow
-     */
+    // 借款
     function _borrowFresh(address borrower, uint256 borrowAmount) internal {
         comptroller.preBorrowHook(address(this), borrower, borrowAmount);
 
         if (accrualBlockNumber != _getBlockNumber()) {
             revert BorrowFreshnessCheck();
         }
-
-        /* Fail gracefully if protocol has insufficient underlying cash */
         if (_getCashPrior() - totalReserves < borrowAmount) {
             revert BorrowCashNotAvailable();
         }
@@ -652,35 +609,15 @@ contract VToken is
         uint256 totalBorrowsNew = totalBorrows + borrowAmount;
 
         /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /*
-         * We write the previously calculated values into storage.
-         *  Note: Avoid token reentrancy attacks by writing increased borrow before external transfer.
-        `*/
         accountBorrows[borrower].principal = accountBorrowsNew;
         accountBorrows[borrower].interestIndex = borrowIndex;
         totalBorrows = totalBorrowsNew;
 
-        /*
-         * We invoke _doTransferOut for the borrower and the borrowAmount.
-         *  On success, the vToken borrowAmount less of cash.
-         *  _doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         */
         _doTransferOut(borrower, borrowAmount);
-
-        /* We emit a Borrow event */
         emit Borrow(borrower, borrowAmount, accountBorrowsNew, totalBorrowsNew);
     }
 
-    /**
-     * @notice Borrows are repaid by another user (possibly the borrower).
-     * @param payer the account paying off the borrow
-     * @param borrower the account with the debt being payed off
-     * @param repayAmount the amount of underlying tokens being returned, or type(uint256).max for the full outstanding amount
-     * @return (uint) the actual repayment amount.
-     */
+    // 还款
     function _repayBorrowFresh(address payer, address borrower, uint256 repayAmount) internal returns (uint256) {
         /* Fail if repayBorrow not allowed */
         comptroller.preRepayHook(address(this), borrower);
@@ -711,15 +648,15 @@ contract VToken is
     }
 
     /**
-     * @notice The sender liquidates the borrowers collateral.
-     *  The collateral seized is transferred to the liquidator.
-     * @param liquidator The address repaying the borrow and seizing collateral
-     * @param borrower The borrower of this vToken to be liquidated
-     * @param vTokenCollateral The market in which to seize collateral from the borrower
-     * @param repayAmount The amount of the underlying borrowed asset to repay
-     * @param skipLiquidityCheck If set to true, allows to liquidate up to 100% of the borrow
-     *   regardless of the account liquidity
-     */
+      * @notice 发送方清算借款人的抵押品。
+      * 扣押的抵押品将转移给清算人。
+      - Liquidator 偿还借款并扣押抵押品的地址
+      - borrower 该vToken将被清算的借款人
+      - vTokenCollateral 从借款人手中夺取抵押品的市场
+      - repayAmount 标的借入资产需要偿还的金额
+      - skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
+      * 与账户流动性无关
+      */
     function _liquidateBorrow(
         address liquidator,
         address borrower,
@@ -731,7 +668,6 @@ contract VToken is
 
         uint256 error = vTokenCollateral.accrueInterest();
         if (error != NO_ERROR) {
-            // accrueInterest emits logs on errors, but we still want to log the fact that an attempted liquidation failed
             revert LiquidateAccrueCollateralInterestFailed(error);
         }
 
@@ -739,14 +675,14 @@ contract VToken is
         _liquidateBorrowFresh(liquidator, borrower, repayAmount, vTokenCollateral, skipLiquidityCheck);
     }
 
-        /**
+     /**
       * @notice 清算人清算借款人的抵押品。
       * 扣押的抵押品将转移给清算人。
-      * @param Liquidator 偿还借款并扣押抵押品的地址
-      * @paramborrower 该vToken将被清算的借款人
-      * @param vTokenCollateral 从借款人手中夺取抵押品的市场
-      * @param repayAmount 标的借入资产需要偿还的金额
-      * @param skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
+      - Liquidator 偿还借款并扣押抵押品的地址
+      - borrower 该vToken将被清算的借款人
+      - vTokenCollateral 从借款人手中夺取抵押品的市场
+      - repayAmount 标的借入资产需要偿还的金额
+      - skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
         与账户流动性无关
       */
     function _liquidateBorrowFresh(
@@ -807,10 +743,10 @@ contract VToken is
       * @notice 将抵押代币（本市场）转移给清算人。
       * @dev 仅在实物清算期间调用，或在另一个 VToken 清算期间由 LiquidateBorrow 调用。
       * 使用 msg.sender 作为抢占器 vToken 而不是参数是绝对重要的。
-      * @param seizerContract 扣押抵押品的合约（借用的 vToken 或 Comptroller）
-      * @param Liquidator 接收扣押抵押品的账户
-      * @param borrower 抵押品被扣押的账户
-      * @param seizeTokens 要抢占的 vToken 数量
+      - seizerContract 扣押抵押品的合约（借用的 vToken 或 Comptroller）
+      - Liquidator 接收扣押抵押品的账户
+      - borrower 抵押品被扣押的账户
+      - seizeTokens 要抢占的 vToken 数量
       */
     function _seize(address seizerContract, address liquidator, address borrower, uint256 seizeTokens) internal {
         comptroller.preSeizeHook(address(this), seizerContract, liquidator, borrower);
@@ -818,9 +754,10 @@ contract VToken is
             revert LiquidateSeizeLiquidatorIsBorrower();
         }
 
-
+        
         //  borrowerTokensNew = accountTokens[borrower] - seizeTokens
         //  liquidatorTokensNew = accountTokens[liquidator] + seizeTokens
+        // 把一部分vtoken销毁掉，并转为对应的储备金
         uint256 liquidationIncentiveMantissa = ComptrollerViewInterface(address(comptroller))
             .liquidationIncentiveMantissa();
         uint256 numerator = mul_(seizeTokens, Exp({ mantissa: protocolSeizeShareMantissa }));
@@ -846,21 +783,13 @@ contract VToken is
 
     function _setComptroller(ComptrollerInterface newComptroller) internal {
         ComptrollerInterface oldComptroller = comptroller;
-        // Ensure invoke comptroller.isComptroller() returns true
         require(newComptroller.isComptroller(), "marker method returned false");
-
-        // Set market's comptroller to newComptroller
         comptroller = newComptroller;
 
-        // Emit NewComptroller(oldComptroller, newComptroller)
         emit NewComptroller(oldComptroller, newComptroller);
     }
 
-    /**
-     * @notice Sets a new reserve factor for the protocol (*requires fresh interest accrual)
-     * @dev Admin function to set a new reserve factor
-     * @param newReserveFactorMantissa New reserve factor (from 0 to 1e18)
-     */
+    // 设置储备金系数
     function _setReserveFactorFresh(uint256 newReserveFactorMantissa) internal {
         // Verify market's block number equals current block number
         if (accrualBlockNumber != _getBlockNumber()) {
@@ -878,12 +807,7 @@ contract VToken is
         emit NewReserveFactor(oldReserveFactorMantissa, newReserveFactorMantissa);
     }
 
-    /**
-     * @notice Add reserves by transferring from caller
-     * @dev Requires fresh interest accrual
-     * @param addAmount Amount of addition to reserves
-     * @return actualAddAmount The actual amount added, excluding the potential token fees
-     */
+    // 主动增加储备金
     function _addReservesFresh(uint256 addAmount) internal returns (uint256) {
         // totalReserves + actualAddAmount
         uint256 totalReservesNew;
@@ -902,54 +826,32 @@ contract VToken is
         return actualAddAmount;
     }
 
-    /**
-     * @notice Reduces reserves by transferring to the protocol reserve contract
-     * @dev Requires fresh interest accrual
-     * @param reduceAmount Amount of reduction to reserves
-     */
+    // 转移部分储备金到 protocolShareReserve(协议储备金合约)
     function _reduceReservesFresh(uint256 reduceAmount) internal {
         // totalReserves - reduceAmount
         uint256 totalReservesNew;
 
-        // We fail gracefully unless market's block number equals current block number
         if (accrualBlockNumber != _getBlockNumber()) {
             revert ReduceReservesFreshCheck();
         }
-
-        // Fail gracefully if protocol has insufficient underlying cash
         if (_getCashPrior() < reduceAmount) {
             revert ReduceReservesCashNotAvailable();
         }
-
-        // Check reduceAmount ≤ reserves[n] (totalReserves)
         if (reduceAmount > totalReserves) {
             revert ReduceReservesCashValidation();
         }
 
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
         totalReservesNew = totalReserves - reduceAmount;
-
-        // Store reserves[n+1] = reserves[n] - reduceAmount
         totalReserves = totalReservesNew;
 
-        // _doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-        // Transferring an underlying asset to the protocolShareReserve contract to channel the funds for different use.
         _doTransferOut(protocolShareReserve, reduceAmount);
-
         // Update the pool asset's state in the protocol share reserve for the above transfer.
         IProtocolShareReserve(protocolShareReserve).updateAssetsState(address(comptroller), underlying);
 
         emit ReservesReduced(protocolShareReserve, reduceAmount, totalReservesNew);
     }
 
-    /**
-     * @notice updates the interest rate model (*requires fresh interest accrual)
-     * @dev Admin function to update the interest rate model
-     * @param newInterestRateModel the new interest rate model to use
-     */
+    // 设置利率计算模型
     function _setInterestRateModelFresh(InterestRateModel newInterestRateModel) internal {
         // Used to store old model for use in the event that is emitted on success
         InterestRateModel oldInterestRateModel;
@@ -959,29 +861,14 @@ contract VToken is
             revert SetInterestRateModelFreshCheck();
         }
 
-        // Track the market's current interest rate model
         oldInterestRateModel = interestRateModel;
-
-        // Ensure invoke newInterestRateModel.isInterestRateModel() returns true
         require(newInterestRateModel.isInterestRateModel(), "marker method returned false");
-
-        // Set the interest rate model to newInterestRateModel
         interestRateModel = newInterestRateModel;
 
-        // Emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel)
         emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel);
     }
 
-    /*** Safe Token ***/
 
-    /**
-     * @dev Similar to ERC-20 transfer, but handles tokens that have transfer fees.
-     *      This function returns the actual amount received,
-     *      which may be less than `amount` if there is a fee attached to the transfer.
-     * @param from Sender of the underlying tokens
-     * @param amount Amount of underlying to transfer
-     * @return Actual amount received
-     */
     function _doTransferIn(address from, uint256 amount) internal virtual returns (uint256) {
         IERC20Upgradeable token = IERC20Upgradeable(underlying);
         uint256 balanceBefore = token.balanceOf(address(this));
@@ -990,25 +877,10 @@ contract VToken is
         // Return the amount that was *actually* transferred
         return balanceAfter - balanceBefore;
     }
-
-    /**
-     * @dev Just a regular ERC-20 transfer, reverts on failure
-     * @param to Receiver of the underlying tokens
-     * @param amount Amount of underlying to transfer
-     */
     function _doTransferOut(address to, uint256 amount) internal virtual {
         IERC20Upgradeable token = IERC20Upgradeable(underlying);
         token.safeTransfer(to, amount);
     }
-
-    /**
-     * @notice Transfer `tokens` tokens from `src` to `dst` by `spender`
-     * @dev Called by both `transfer` and `transferFrom` internally
-     * @param spender The address of the account performing the transfer
-     * @param src The address of the source account
-     * @param dst The address of the destination account
-     * @param tokens The number of tokens to transfer
-     */
     function _transferTokens(address spender, address src, address dst, uint256 tokens) internal {
         /* Fail if transfer not allowed */
         comptroller.preTransferHook(address(this), src, dst, tokens);
@@ -1047,19 +919,19 @@ contract VToken is
     }
 
     /**
-     * @notice Initialize the money market
-     * @param underlying_ The address of the underlying asset
-     * @param comptroller_ The address of the Comptroller
-     * @param interestRateModel_ The address of the interest rate model
-     * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
-     * @param name_ ERC-20 name of this token
-     * @param symbol_ ERC-20 symbol of this token
-     * @param decimals_ ERC-20 decimal precision of this token
-     * @param admin_ Address of the administrator of this token
-     * @param accessControlManager_ AccessControlManager contract address
-     * @param riskManagement Addresses of risk & income related contracts
-     * @param reserveFactorMantissa_ Percentage of borrow interest that goes to reserves (from 0 to 1e18)
-     */
+      * @notice 构建新的货币市场
+      - underlying_ 标的资产的地址
+      - comptroller_ Comptroller的地址
+      - interestRateModel_ 利率模型的地址
+      - initialExchangeRateMantissa_ 初始汇率，按 1e18 缩放
+      - name_ 该代币的ERC-20名称
+      - symbol_ 该代币的ERC-20符号
+      - Decimals_ 该代币的 ERC-20 小数精度
+      - admin_ 该token的管理员地址
+      - accessControlManager_ AccessControlManager合约地址
+      - riskManagement 风险和收入相关合约的地址
+      - ReserveFactorMantissa_ 转入准备金的借入利息百分比（从 0 到 1e18）
+      */
     function _initialize(
         address underlying_,
         ComptrollerInterface comptroller_,
@@ -1085,11 +957,10 @@ contract VToken is
 
         // Initialize block number and borrow index (block number mocks depend on comptroller being set)
         accrualBlockNumber = _getBlockNumber();
-        borrowIndex = MANTISSA_ONE;
+        borrowIndex = MANTISSA_ONE;  // 1e18
 
         // Set the interest rate model (depends on block number / borrow index)
         _setInterestRateModelFresh(interestRateModel_);
-
         _setReserveFactorFresh(reserveFactorMantissa_);
 
         name = name_;
@@ -1097,7 +968,7 @@ contract VToken is
         decimals = decimals_;
         _setShortfallContract(riskManagement.shortfall);
         _setProtocolShareReserve(riskManagement.protocolShareReserve);
-        protocolSeizeShareMantissa = DEFAULT_PROTOCOL_SEIZE_SHARE_MANTISSA;
+        protocolSeizeShareMantissa = DEFAULT_PROTOCOL_SEIZE_SHARE_MANTISSA;  // 5e16; // 5%,清算时的协议收益
 
         // Set underlying and sanity check it
         underlying = underlying_;
@@ -1108,13 +979,15 @@ contract VToken is
         _transferOwnership(admin_);
     }
 
+    // 设置坏账合约地址
     function _setShortfallContract(address shortfall_) internal {
         ensureNonzeroAddress(shortfall_);
         address oldShortfall = shortfall;
         shortfall = shortfall_;
         emit NewShortfallContract(oldShortfall, shortfall_);
-    }
+    }   
 
+    // 设置协议储备金合约地址
     function _setProtocolShareReserve(address payable protocolShareReserve_) internal {
         ensureNonzeroAddress(protocolShareReserve_);
         address oldProtocolShareReserve = address(protocolShareReserve);
@@ -1122,21 +995,12 @@ contract VToken is
         emit NewProtocolShareReserve(oldProtocolShareReserve, address(protocolShareReserve_));
     }
 
-    /**
-     * @notice Gets balance of this contract in terms of the underlying
-     * @dev This excludes the value of the current message, if any
-     * @return The quantity of underlying tokens owned by this contract
-     */
+    
     function _getCashPrior() internal view virtual returns (uint256) {
         IERC20Upgradeable token = IERC20Upgradeable(underlying);
         return token.balanceOf(address(this));
     }
 
-    /**
-     * @dev Function to simply retrieve block number
-     *  This exists mainly for inheriting test contracts to stub this result.
-     * @return Current block number
-     */
     function _getBlockNumber() internal view virtual returns (uint256) {
         return block.number;
     }
@@ -1154,26 +1018,17 @@ contract VToken is
             return 0;
         }
 
-        /* Calculate new borrow balance using the interest index:
-         *  recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
-         */
+        // recentBorrowBalance = borrower.borrowBalance * market.borrowIndex / borrower.borrowIndex
         // 本息 = 本金 * 当前累计利率 / 借款时累积利率
         uint256 principalTimesIndex = borrowSnapshot.principal * borrowIndex;
         return principalTimesIndex / borrowSnapshot.interestIndex;
     }
 
-    /**
-     * @notice Calculates the exchange rate from the underlying to the VToken
-     * @dev This function does not accrue interest before calculating the exchange rate
-     * @return exchangeRate Calculated exchange rate scaled by 1e18
-     */
+    //Calculates the exchange rate from the underlying to the VToken
     function _exchangeRateStored() internal view virtual returns (uint256) {
         uint256 _totalSupply = totalSupply;
         if (_totalSupply == 0) {
-            /*
-             * If there are no tokens minted:
-             *  exchangeRate = initialExchangeRate
-             */
+            // If there are no tokens minted: exchangeRate = initialExchangeRate
             return initialExchangeRateMantissa;
         }
         /*
