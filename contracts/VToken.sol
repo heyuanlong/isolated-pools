@@ -278,14 +278,7 @@ contract VToken is
         _addReservesFresh(addAmount);
     }
 
-    /**
-     * @notice accrues interest and updates the interest rate model using _setInterestRateModelFresh
-     * @dev Admin function to accrue interest and update the interest rate model
-     * @param newInterestRateModel the new interest rate model to use
-     * @custom:event Emits NewMarketInterestRateModel event; may emit AccrueInterest
-     * @custom:error Unauthorized error is thrown when the call is not authorized by AccessControlManager
-     * @custom:access Controlled by AccessControlManager
-     */
+    // 设置利率计算模型
     function setInterestRateModel(InterestRateModel newInterestRateModel) external override {
         _checkAccessAllowed("setInterestRateModel(address)");
 
@@ -294,55 +287,44 @@ contract VToken is
     }
 
     /**
-     * @notice Repays a certain amount of debt, treats the rest of the borrow as bad debt, essentially
-     *   "forgiving" the borrower. Healing is a situation that should rarely happen. However, some pools
-     *   may list risky assets or be configured improperly – we want to still handle such cases gracefully.
-     *   We assume that Comptroller does the seizing, so this function is only available to Comptroller.
-     * @dev This function does not call any Comptroller hooks (like "healAllowed"), because we assume
-     *   the Comptroller does all the necessary checks before calling this function.
-     * @param payer account who repays the debt
-     * @param borrower account to heal
-     * @param repayAmount amount to repay
-     * @custom:event Emits RepayBorrow, BadDebtIncreased events; may emit AccrueInterest
-     * @custom:error HealBorrowUnauthorized is thrown when the request does not come from Comptroller
-     * @custom:access Only Comptroller
-     */
+      * @notice 偿还一定数额的债务，将剩余的借款视为坏账，本质上是
+      *“宽恕”借款人。 治愈是一种很少发生的情况。 不过，有些泳池
+      * 可能会列出风险资产或配置不当 – 我们仍希望优雅地处理此类情况。
+      * 我们假设Comptroller 负责扣押，因此该功能仅对Comptroller 可用。
+      * @dev 这个函数不会调用任何 Comptroller 钩子（如“healAllowed”），因为我们假设
+      * 审计员在调用此函数之前执行所有必要的检查。
+      * @param payer 偿还债务的账户
+      * @param borrower 借款人帐户要治愈
+      * @param repayAmount 还款金额
+      */
     function healBorrow(address payer, address borrower, uint256 repayAmount) external override nonReentrant {
         if (repayAmount != 0) {
             comptroller.preRepayHook(address(this), borrower);
         }
-
         if (msg.sender != address(comptroller)) {
             revert HealBorrowUnauthorized();
         }
 
+        // 计算个人的最新本息
         uint256 accountBorrowsPrev = _borrowBalanceStored(borrower);
         uint256 totalBorrowsNew = totalBorrows;
 
         uint256 actualRepayAmount;
         if (repayAmount != 0) {
-            // _doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
-            // We violate checks-effects-interactions here to account for tokens that take transfer fees
             actualRepayAmount = _doTransferIn(payer, repayAmount);
             totalBorrowsNew = totalBorrowsNew - actualRepayAmount;
-            emit RepayBorrow(
-                payer,
-                borrower,
-                actualRepayAmount,
-                accountBorrowsPrev - actualRepayAmount,
-                totalBorrowsNew
-            );
+            emit RepayBorrow(payer,borrower,actualRepayAmount,accountBorrowsPrev - actualRepayAmount,totalBorrowsNew);
         }
 
         // The transaction will fail if trying to repay too much
         uint256 badDebtDelta = accountBorrowsPrev - actualRepayAmount;
         if (badDebtDelta != 0) {
+            // 将剩余的借款视为坏账
             uint256 badDebtOld = badDebt;
             uint256 badDebtNew = badDebtOld + badDebtDelta;
             totalBorrowsNew = totalBorrowsNew - badDebtDelta;
             badDebt = badDebtNew;
 
-            // We treat healing as "repayment", where vToken is the payer
             emit RepayBorrow(address(this), borrower, badDebtDelta, 0, totalBorrowsNew);
             emit BadDebtIncreased(borrower, badDebtDelta, badDebtOld, badDebtNew);
         }
@@ -354,24 +336,15 @@ contract VToken is
         emit HealBorrow(payer, borrower, repayAmount);
     }
 
-    /**
-     * @notice The extended version of liquidations, callable only by Comptroller. May skip
-     *  the close factor check. The collateral seized is transferred to the liquidator.
-     * @param liquidator The address repaying the borrow and seizing collateral
-     * @param borrower The borrower of this vToken to be liquidated
-     * @param repayAmount The amount of the underlying borrowed asset to repay
-     * @param vTokenCollateral The market in which to seize collateral from the borrower
-     * @param skipLiquidityCheck If set to true, allows to liquidate up to 100% of the borrow
-     *   regardless of the account liquidity
-     * @custom:event Emits LiquidateBorrow event; may emit AccrueInterest
-     * @custom:error ForceLiquidateBorrowUnauthorized is thrown when the request does not come from Comptroller
-     * @custom:error LiquidateAccrueCollateralInterestFailed is thrown when it is not possible to accrue interest on the collateral vToken
-     * @custom:error LiquidateCollateralFreshnessCheck is thrown when interest has not been accrued on the collateral vToken
-     * @custom:error LiquidateLiquidatorIsBorrower is thrown when trying to liquidate self
-     * @custom:error LiquidateCloseAmountIsZero is thrown when repayment amount is zero
-     * @custom:error LiquidateCloseAmountIsUintMax is thrown when repayment amount is UINT_MAX
-     * @custom:access Only Comptroller
-     */
+      /**
+      * @notice 清算的扩展版本，只能由审计长调用。 可以跳过接近因素检查。 扣押的抵押品将转移给清算人。
+      * @param Liquidator 偿还借款并扣押抵押品的地址
+      * @param borrower 该vToken将被清算的借款人
+      * @param repayAmount 标的借入资产需要偿还的金额
+      * @param vTokenCollateral 从借款人手中夺取抵押品的市场
+      * @param skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
+        与账户流动性无关
+      */
     function forceLiquidateBorrow(
         address liquidator,
         address borrower,
@@ -385,28 +358,13 @@ contract VToken is
         _liquidateBorrow(liquidator, borrower, repayAmount, vTokenCollateral, skipLiquidityCheck);
     }
 
-    /**
-     * @notice Transfers collateral tokens (this market) to the liquidator.
-     * @dev Will fail unless called by another vToken during the process of liquidation.
-     *  It's absolutely critical to use msg.sender as the borrowed vToken and not a parameter.
-     * @param liquidator The account receiving seized collateral
-     * @param borrower The account having collateral seized
-     * @param seizeTokens The number of vTokens to seize
-     * @custom:event Emits Transfer, ReservesAdded events
-     * @custom:error LiquidateSeizeLiquidatorIsBorrower is thrown when trying to liquidate self
-     * @custom:access Not restricted
-     */
+    // 将抵押代币（本市场）转移给清算人。
     function seize(address liquidator, address borrower, uint256 seizeTokens) external override nonReentrant {
         _seize(msg.sender, liquidator, borrower, seizeTokens);
     }
 
-    /**
-     * @notice Updates bad debt
-     * @dev Called only when bad debt is recovered from auction
-     * @param recoveredAmount_ The amount of bad debt recovered
-     * @custom:event Emits BadDebtRecovered event
-     * @custom:access Only Shortfall contract
-     */
+    // 由shortfall合约更新坏账
+    // @dev Called only when bad debt is recovered from auction
     function badDebtRecovered(uint256 recoveredAmount_) external {
         require(msg.sender == shortfall, "only shortfall contract can update bad debt");
         require(recoveredAmount_ <= badDebt, "more than bad debt recovered from auction");
@@ -418,31 +376,17 @@ contract VToken is
         emit BadDebtRecovered(badDebtOld, badDebtNew);
     }
 
-    /**
-     * @notice Sets protocol share reserve contract address
-     * @param protocolShareReserve_ The address of the protocol share reserve contract
-     * @custom:error ZeroAddressNotAllowed is thrown when protocol share reserve address is zero
-     * @custom:access Only Governance
-     */
+    // 设置协议储备金合约地址
     function setProtocolShareReserve(address payable protocolShareReserve_) external onlyOwner {
         _setProtocolShareReserve(protocolShareReserve_);
     }
 
-    /**
-     * @notice Sets shortfall contract address
-     * @param shortfall_ The address of the shortfall contract
-     * @custom:error ZeroAddressNotAllowed is thrown when shortfall contract address is zero
-     * @custom:access Only Governance
-     */
+    // 设置坏账合约地址
     function setShortfallContract(address shortfall_) external onlyOwner {
         _setShortfallContract(shortfall_);
     }
 
-    /**
-     * @notice A public function to sweep accidental ERC-20 transfers to this contract. Tokens are sent to admin (timelock)
-     * @param token The address of the ERC-20 token to sweep
-     * @custom:access Only Governance
-     */
+    // 一个公共函数，用于清除意外的 ERC-20 转账到此合约。 令牌发送给管理员（时间锁）
     function sweepToken(IERC20Upgradeable token) external override {
         require(msg.sender == owner(), "VToken::sweepToken: only admin can sweep tokens");
         require(address(token) != underlying, "VToken::sweepToken: can not sweep underlying token");
@@ -452,34 +396,16 @@ contract VToken is
         emit SweepToken(address(token));
     }
 
-    /**
-     * @notice Get the current allowance from `owner` for `spender`
-     * @param owner The address of the account which owns the tokens to be spent
-     * @param spender The address of the account which may transfer tokens
-     * @return amount The number of tokens allowed to be spent (type(uint256).max means infinite)
-     */
+
     function allowance(address owner, address spender) external view override returns (uint256) {
         return transferAllowances[owner][spender];
     }
-
-    /**
-     * @notice Get the token balance of the `owner`
-     * @param owner The address of the account to query
-     * @return amount The number of tokens owned by `owner`
-     */
     function balanceOf(address owner) external view override returns (uint256) {
         return accountTokens[owner];
     }
 
-    /**
-     * @notice Get a snapshot of the account's balances, and the cached exchange rate
-     * @dev This is used by comptroller to more efficiently perform liquidity checks.
-     * @param account Address of the account to snapshot
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @return vTokenBalance User's balance of vTokens
-     * @return borrowBalance Amount owed in terms of underlying
-     * @return exchangeRate Stored exchange rate
-     */
+    // @notice 获取账户余额的快照，以及缓存的汇率
+    // @dev 审计员使用它来更有效地执行流动性检查。
     function getAccountSnapshot(
         address account
     )
@@ -491,59 +417,37 @@ contract VToken is
         return (NO_ERROR, accountTokens[account], _borrowBalanceStored(account), _exchangeRateStored());
     }
 
-    /**
-     * @notice Get cash balance of this vToken in the underlying asset
-     * @return cash The quantity of underlying asset owned by this contract
-     */
     function getCash() external view override returns (uint256) {
         return _getCashPrior();
     }
 
-    /**
-     * @notice Returns the current per-block borrow interest rate for this vToken
-     * @return rate The borrow interest rate per block, scaled by 1e18
-     */
+    // 当前的每块借入利率
     function borrowRatePerBlock() external view override returns (uint256) {
         return interestRateModel.getBorrowRate(_getCashPrior(), totalBorrows, totalReserves, badDebt);
     }
 
-    /**
-     * @notice Returns the current per-block supply interest rate for this v
-     * @return rate The supply interest rate per block, scaled by 1e18
-     */
+    // 当前每块供应利率
     function supplyRatePerBlock() external view override returns (uint256) {
         return
             interestRateModel.getSupplyRate(
                 _getCashPrior(),
                 totalBorrows,
                 totalReserves,
-                reserveFactorMantissa,
+                reserveFactorMantissa, // 储备金系数
                 badDebt
             );
     }
 
-    /**
-     * @notice Return the borrow balance of account based on stored data
-     * @param account The address whose balance should be calculated
-     * @return borrowBalance The calculated balance
-     */
+    // 计算个人的最新借款本息 based on stored data
     function borrowBalanceStored(address account) external view override returns (uint256) {
         return _borrowBalanceStored(account);
     }
 
-    /**
-     * @notice Calculates the exchange rate from the underlying to the VToken
-     * @dev This function does not accrue interest before calculating the exchange rate
-     * @return exchangeRate Calculated exchange rate scaled by 1e18
-     */
+    // exchangeRate = (totalCash + totalBorrows + badDebt - totalReserves) / totalSupply
+    // vtoken * exchangeRate = asset
     function exchangeRateStored() external view override returns (uint256) {
         return _exchangeRateStored();
     }
-
-    /**
-     * @notice Accrue interest then return the up-to-date exchange rate
-     * @return exchangeRate Calculated exchange rate scaled by 1e18
-     */
     function exchangeRateCurrent() public override nonReentrant returns (uint256) {
         accrueInterest();
         return _exchangeRateStored();
@@ -591,7 +495,6 @@ contract VToken is
          *  borrowIndexNew = simpleInterestFactor * borrowIndex + borrowIndex
          */
 
-
         Exp memory simpleInterestFactor = mul_(Exp({ mantissa: borrowRateMantissa }), blockDelta);
         uint256 interestAccumulated = mul_ScalarTruncate(simpleInterestFactor, borrowsPrior);
         uint256 totalBorrowsNew = interestAccumulated + borrowsPrior;
@@ -604,26 +507,17 @@ contract VToken is
         // 更新累积利率：  最新 borrowIndex= 上一个borrowIndex*（1+borrowRate）
         uint256 borrowIndexNew = mul_ScalarTruncateAddUInt(simpleInterestFactor, borrowIndexPrior, borrowIndexPrior);
 
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
 
-        /* We write the previously calculated values into storage */
-        
         accrualBlockNumber = currentBlockNumber;        // 更新计息时间
         borrowIndex = borrowIndexNew;                   // 更新累积利率
         totalBorrows = totalBorrowsNew;
         totalReserves = totalReservesNew;
-
         // 更新总借款，总借款=总借款+利息=总借款+总借款*利率=总借款*（1+利率）
         // totalBorrows = totalBorrows*(1+borrowRate);
         // 更新总储备金
         // totalReserves =totalReserves+ borrowRate*totalBorrows*reserveFactor;
 
-
-        /* We emit an AccrueInterest event */
         emit AccrueInterest(cashPrior, interestAccumulated, borrowIndexNew, totalBorrowsNew);
-
         return NO_ERROR;
     }
 
@@ -853,7 +747,7 @@ contract VToken is
       * @param vTokenCollateral 从借款人手中夺取抵押品的市场
       * @param repayAmount 标的借入资产需要偿还的金额
       * @param skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
-      * 与账户流动性无关
+        与账户流动性无关
       */
     function _liquidateBorrowFresh(
         address liquidator,
