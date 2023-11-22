@@ -227,21 +227,11 @@ contract VToken is
         return NO_ERROR;
     }
 
-    /**
-     * @notice The sender liquidates the borrowers collateral.
-     *  The collateral seized is transferred to the liquidator.
-     * @param borrower The borrower of this vToken to be liquidated
-     * @param repayAmount The amount of the underlying borrowed asset to repay
-     * @param vTokenCollateral The market in which to seize collateral from the borrower
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @custom:event Emits LiquidateBorrow event; may emit AccrueInterest
-     * @custom:error LiquidateAccrueCollateralInterestFailed is thrown when it is not possible to accrue interest on the collateral vToken
-     * @custom:error LiquidateCollateralFreshnessCheck is thrown when interest has not been accrued on the collateral vToken
-     * @custom:error LiquidateLiquidatorIsBorrower is thrown when trying to liquidate self
-     * @custom:error LiquidateCloseAmountIsZero is thrown when repayment amount is zero
-     * @custom:error LiquidateCloseAmountIsUintMax is thrown when repayment amount is UINT_MAX
-     * @custom:access Not restricted
-     */
+
+    // 发送方清算借款人的抵押品。扣押的抵押品将转移给清算人。
+    // borrower 该vToken将被清算的借款人
+    // repayAmount 标的借入资产需要偿还的金额
+    // vTokenCollateral 从借款人手中夺取抵押品的市场
     function liquidateBorrow(
         address borrower,
         uint256 repayAmount,
@@ -251,15 +241,10 @@ contract VToken is
         return NO_ERROR;
     }
 
-    /**
-     * @notice sets protocol share accumulated from liquidations
-     * @dev must be equal or less than liquidation incentive - 1
-     * @param newProtocolSeizeShareMantissa_ new protocol share mantissa
-     * @custom:event Emits NewProtocolSeizeShare event on success
-     * @custom:error Unauthorized error is thrown when the call is not authorized by AccessControlManager
-     * @custom:error ProtocolSeizeShareTooBig is thrown when the new seize share is too high
-     * @custom:access Controlled by AccessControlManager
-     */
+
+    // 设置清算中累积的协议份额。就是当进行清算时，协议从中收取一定的收益
+    // must be equal or less than liquidation incentive - 1
+    // newProtocolSeizeShareMantissa_ 新协议共享尾数
     function setProtocolSeizeShare(uint256 newProtocolSeizeShareMantissa_) external {
         _checkAccessAllowed("setProtocolSeizeShare(uint256)");
         uint256 liquidationIncentive = ComptrollerViewInterface(address(comptroller)).liquidationIncentiveMantissa();
@@ -272,15 +257,8 @@ contract VToken is
         emit NewProtocolSeizeShare(oldProtocolSeizeShareMantissa, newProtocolSeizeShareMantissa_);
     }
 
-    /**
-     * @notice accrues interest and sets a new reserve factor for the protocol using _setReserveFactorFresh
-     * @dev Admin function to accrue interest and set a new reserve factor
-     * @param newReserveFactorMantissa New reserve factor (from 0 to 1e18)
-     * @custom:event Emits NewReserveFactor event; may emit AccrueInterest
-     * @custom:error Unauthorized error is thrown when the call is not authorized by AccessControlManager
-     * @custom:error SetReserveFactorBoundsCheck is thrown when the new reserve factor is too high
-     * @custom:access Controlled by AccessControlManager
-     */
+    // 设置储备金系数
+    // totalReservesNew = interestAccumulated(累计利息) * reserveFactor(储备金系数) + totalReserves
     function setReserveFactor(uint256 newReserveFactorMantissa) external override nonReentrant {
         _checkAccessAllowed("setReserveFactor(uint256)");
 
@@ -288,25 +266,13 @@ contract VToken is
         _setReserveFactorFresh(newReserveFactorMantissa);
     }
 
-    /**
-     * @notice Accrues interest and reduces reserves by transferring to the protocol reserve contract
-     * @param reduceAmount Amount of reduction to reserves
-     * @custom:event Emits ReservesReduced event; may emit AccrueInterest
-     * @custom:error ReduceReservesCashNotAvailable is thrown when the vToken does not have sufficient cash
-     * @custom:error ReduceReservesCashValidation is thrown when trying to withdraw more cash than the reserves have
-     * @custom:access Not restricted
-     */
+    // 转移部分储备金到 protocolShareReserve(协议储备金合约)
     function reduceReserves(uint256 reduceAmount) external override nonReentrant {
         accrueInterest();
         _reduceReservesFresh(reduceAmount);
     }
 
-    /**
-     * @notice The sender adds to reserves.
-     * @param addAmount The amount of underlying token to add as reserves
-     * @custom:event Emits ReservesAdded event; may emit AccrueInterest
-     * @custom:access Not restricted
-     */
+    // 主动增加储备金
     function addReserves(uint256 addAmount) external override nonReentrant {
         accrueInterest();
         _addReservesFresh(addAmount);
@@ -879,16 +845,16 @@ contract VToken is
         _liquidateBorrowFresh(liquidator, borrower, repayAmount, vTokenCollateral, skipLiquidityCheck);
     }
 
-    /**
-     * @notice The liquidator liquidates the borrowers collateral.
-     *  The collateral seized is transferred to the liquidator.
-     * @param liquidator The address repaying the borrow and seizing collateral
-     * @param borrower The borrower of this vToken to be liquidated
-     * @param vTokenCollateral The market in which to seize collateral from the borrower
-     * @param repayAmount The amount of the underlying borrowed asset to repay
-     * @param skipLiquidityCheck If set to true, allows to liquidate up to 100% of the borrow
-     *   regardless of the account liquidity
-     */
+        /**
+      * @notice 清算人清算借款人的抵押品。
+      * 扣押的抵押品将转移给清算人。
+      * @param Liquidator 偿还借款并扣押抵押品的地址
+      * @paramborrower 该vToken将被清算的借款人
+      * @param vTokenCollateral 从借款人手中夺取抵押品的市场
+      * @param repayAmount 标的借入资产需要偿还的金额
+      * @param skipLiquidityCheck 如果设置为 true，允许清算最多 100% 的借款
+      * 与账户流动性无关
+      */
     function _liquidateBorrowFresh(
         address liquidator,
         address borrower,
@@ -896,7 +862,7 @@ contract VToken is
         VTokenInterface vTokenCollateral,
         bool skipLiquidityCheck
     ) internal {
-        /* Fail if liquidate not allowed */
+        // comptroller 判断能否进行清算
         comptroller.preLiquidateHook(
             address(this),
             address(vTokenCollateral),
@@ -905,83 +871,62 @@ contract VToken is
             skipLiquidityCheck
         );
 
-        /* Verify market's block number equals current block number */
         if (accrualBlockNumber != _getBlockNumber()) {
             revert LiquidateFreshnessCheck();
         }
-
-        /* Verify vTokenCollateral market's block number equals current block number */
         if (vTokenCollateral.accrualBlockNumber() != _getBlockNumber()) {
             revert LiquidateCollateralFreshnessCheck();
         }
-
-        /* Fail if borrower = liquidator */
         if (borrower == liquidator) {
             revert LiquidateLiquidatorIsBorrower();
         }
-
-        /* Fail if repayAmount = 0 */
         if (repayAmount == 0) {
             revert LiquidateCloseAmountIsZero();
         }
-
-        /* Fail if repayAmount = type(uint256).max */
         if (repayAmount == type(uint256).max) {
             revert LiquidateCloseAmountIsUintMax();
         }
 
-        /* Fail if repayBorrow fails */
+        // 还款
         uint256 actualRepayAmount = _repayBorrowFresh(liquidator, borrower, repayAmount);
 
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /* We calculate the number of collateral tokens that will be seized */
+        // comptroller 计算出还款金额能获取多少抵押品
         (uint256 amountSeizeError, uint256 seizeTokens) = comptroller.liquidateCalculateSeizeTokens(
             address(this),
             address(vTokenCollateral),
             actualRepayAmount
         );
         require(amountSeizeError == NO_ERROR, "LIQUIDATE_COMPTROLLER_CALCULATE_AMOUNT_SEIZE_FAILED");
-
-        /* Revert if borrower collateral token balance < seizeTokens */
         require(vTokenCollateral.balanceOf(borrower) >= seizeTokens, "LIQUIDATE_SEIZE_TOO_MUCH");
 
-        // If this is also the collateral, call _seize internally to avoid re-entrancy, otherwise make an external call
+        // 将抵押代币（本市场）转移给清算人。
         if (address(vTokenCollateral) == address(this)) {
             _seize(address(this), liquidator, borrower, seizeTokens);
         } else {
             vTokenCollateral.seize(liquidator, borrower, seizeTokens);
         }
 
-        /* We emit a LiquidateBorrow event */
         emit LiquidateBorrow(liquidator, borrower, actualRepayAmount, address(vTokenCollateral), seizeTokens);
     }
 
     /**
-     * @notice Transfers collateral tokens (this market) to the liquidator.
-     * @dev Called only during an in-kind liquidation, or by liquidateBorrow during the liquidation of another VToken.
-     *  It's absolutely critical to use msg.sender as the seizer vToken and not a parameter.
-     * @param seizerContract The contract seizing the collateral (either borrowed vToken or Comptroller)
-     * @param liquidator The account receiving seized collateral
-     * @param borrower The account having collateral seized
-     * @param seizeTokens The number of vTokens to seize
-     */
+      * @notice 将抵押代币（本市场）转移给清算人。
+      * @dev 仅在实物清算期间调用，或在另一个 VToken 清算期间由 LiquidateBorrow 调用。
+      * 使用 msg.sender 作为抢占器 vToken 而不是参数是绝对重要的。
+      * @param seizerContract 扣押抵押品的合约（借用的 vToken 或 Comptroller）
+      * @param Liquidator 接收扣押抵押品的账户
+      * @param borrower 抵押品被扣押的账户
+      * @param seizeTokens 要抢占的 vToken 数量
+      */
     function _seize(address seizerContract, address liquidator, address borrower, uint256 seizeTokens) internal {
-        /* Fail if seize not allowed */
         comptroller.preSeizeHook(address(this), seizerContract, liquidator, borrower);
-
-        /* Fail if borrower = liquidator */
         if (borrower == liquidator) {
             revert LiquidateSeizeLiquidatorIsBorrower();
         }
 
-        /*
-         * We calculate the new borrower and liquidator token balances, failing on underflow/overflow:
-         *  borrowerTokensNew = accountTokens[borrower] - seizeTokens
-         *  liquidatorTokensNew = accountTokens[liquidator] + seizeTokens
-         */
+
+        //  borrowerTokensNew = accountTokens[borrower] - seizeTokens
+        //  liquidatorTokensNew = accountTokens[liquidator] + seizeTokens
         uint256 liquidationIncentiveMantissa = ComptrollerViewInterface(address(comptroller))
             .liquidationIncentiveMantissa();
         uint256 numerator = mul_(seizeTokens, Exp({ mantissa: protocolSeizeShareMantissa }));
@@ -991,17 +936,15 @@ contract VToken is
         uint256 protocolSeizeAmount = mul_ScalarTruncate(exchangeRate, protocolSeizeTokens);
         uint256 totalReservesNew = totalReserves + protocolSeizeAmount;
 
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /* We write the calculated values into storage */
+ 
+        // 储备金增加，vtoken总量减少
         totalReserves = totalReservesNew;
         totalSupply = totalSupply - protocolSeizeTokens;
+
+        // 借款者减vtoken，清算者加vtoken
         accountTokens[borrower] = accountTokens[borrower] - seizeTokens;
         accountTokens[liquidator] = accountTokens[liquidator] + liquidatorSeizeTokens;
 
-        /* Emit a Transfer event */
         emit Transfer(borrower, liquidator, liquidatorSeizeTokens);
         emit Transfer(borrower, address(this), protocolSeizeTokens);
         emit ReservesAdded(address(this), protocolSeizeAmount, totalReservesNew);
