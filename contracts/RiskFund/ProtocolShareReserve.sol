@@ -15,14 +15,12 @@ contract ProtocolShareReserve is ExponentialNoError, ReserveHelpers, IProtocolSh
 
     address public protocolIncome;
     address public riskFund;
-    // Percentage of funds not sent to the RiskFund contract when the funds are released, following the project Tokenomics
+
+    // 根据 Tokenomics 项目，资金释放时未发送至 RiskFund 合约的资金百分比
     uint256 private constant PROTOCOL_SHARE_PERCENTAGE = 50;
     uint256 private constant BASE_UNIT = 100;
 
-    /// @notice Emitted when funds are released
     event FundsReleased(address indexed comptroller, address indexed asset, uint256 amount);
-
-    /// @notice Emitted when pool registry address is updated
     event PoolRegistryUpdated(address indexed oldPoolRegistry, address indexed newPoolRegistry);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -34,13 +32,11 @@ contract ProtocolShareReserve is ExponentialNoError, ReserveHelpers, IProtocolSh
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the deployer to owner.
-     * @param protocolIncome_ The address protocol income will be sent to
-     * @param riskFund_ Risk fund address
-     * @custom:error ZeroAddressNotAllowed is thrown when protocol income address is zero
-     * @custom:error ZeroAddressNotAllowed is thrown when risk fund address is zero
-     */
+      /**
+      * @notice 将部署者初始化为所有者。
+      - protocolIncome_ 协议收入将发送到的地址
+      - riskFund _风险基金地址
+      */
     function initialize(address protocolIncome_, address riskFund_) external initializer {
         ensureNonzeroAddress(protocolIncome_);
         ensureNonzeroAddress(riskFund_);
@@ -51,11 +47,6 @@ contract ProtocolShareReserve is ExponentialNoError, ReserveHelpers, IProtocolSh
         riskFund = riskFund_;
     }
 
-    /**
-     * @notice Pool registry setter.
-     * @param poolRegistry_ Address of the pool registry
-     * @custom:error ZeroAddressNotAllowed is thrown when pool registry address is zero
-     */
     function setPoolRegistry(address poolRegistry_) external onlyOwner {
         ensureNonzeroAddress(poolRegistry_);
         address oldPoolRegistry = poolRegistry;
@@ -64,13 +55,11 @@ contract ProtocolShareReserve is ExponentialNoError, ReserveHelpers, IProtocolSh
     }
 
     /**
-     * @notice Release funds
-     * @param comptroller Pool's Comptroller
-     * @param asset  Asset to be released
-     * @param amount Amount to release
-     * @return Number of total released tokens
-     * @custom:error ZeroAddressNotAllowed is thrown when asset address is zero
-     */
+      * @notice 释放资金
+      - comptroller 矿池的 Comptroller
+      - asset 待释放的资产
+      - amount 释放数量
+      */
     function releaseFunds(address comptroller, address asset, uint256 amount) external nonReentrant returns (uint256) {
         ensureNonzeroAddress(asset);
         require(amount <= _poolsAssetsReserves[comptroller][asset], "ProtocolShareReserve: Insufficient pool balance");
@@ -83,23 +72,24 @@ contract ProtocolShareReserve is ExponentialNoError, ReserveHelpers, IProtocolSh
         ).mantissa;
 
         address riskFund_ = riskFund;
-
         emit FundsReleased(comptroller, asset, amount);
 
+
+        // 一部分转给protocolIncome，另一部分转给riskFund合约
         IERC20Upgradeable(asset).safeTransfer(protocolIncome, protocolIncomeAmount);
         IERC20Upgradeable(asset).safeTransfer(riskFund_, amount - protocolIncomeAmount);
 
-        // Update the pool asset's state in the risk fund for the above transfer.
+        //riskFund合约更新代币数量
         IRiskFund(riskFund_).updateAssetsState(comptroller, asset);
-
         return amount;
     }
 
     /**
-     * @notice Update the reserve of the asset for the specific pool after transferring to the protocol share reserve.
-     * @param comptroller  Comptroller address(pool)
-     * @param asset Asset address.
-     */
+      * @notice 在转移到协议份额储备后，更新特定池的资产储备。
+      - comptroller 控制器地址(池)
+      - asset 资产地址。
+      */
+    // VToken 会调这个方法
     function updateAssetsState(
         address comptroller,
         address asset

@@ -37,6 +37,9 @@ Pool GameFi
   - PoolLens 检索每个注册矿池的重要信息
   - 存入资产，mint VToken，是根据exchangeRate兑换的。
   - 每次借款的时候，会先计算并存储最新借款的本息，让存储最新的累计利率。(跟持币生息的原理差不多)
+  - ProtocolShareReserve 就是个分发协议收益金的简单合约，一部分转给protocolIncome，另一部分转给riskFund合约
+
+  
 
   
 
