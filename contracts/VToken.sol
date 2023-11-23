@@ -352,6 +352,7 @@ contract VToken is
         _seize(msg.sender, liquidator, borrower, seizeTokens);
     }
 
+    // badDebt 是指的是代币数量
     // 由shortfall合约更新坏账
     // @dev Called only when bad debt is recovered from auction
     function badDebtRecovered(uint256 recoveredAmount_) external {
