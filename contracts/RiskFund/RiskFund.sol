@@ -19,40 +19,29 @@ import { ensureNonzeroAddress } from "../lib/validators.sol";
 import { ApproveOrRevert } from "../lib/ApproveOrRevert.sol";
 
 /**
- * @title RiskFund
- * @author Venus
- * @notice Contract with basic features to track/hold different assets for different Comptrollers.
- * @dev This contract does not support BNB.
- */
+  * @title 风险基金
+  * @notice 具有基本功能的合约，用于为不同的审计员跟踪/持有不同的资产。
+  * @dev 该合约不支持 BNB。
+  */
 contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, MaxLoopsLimitHelper, IRiskFund {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using ApproveOrRevert for IERC20Upgradeable;
 
-    address public convertibleBaseAsset;
-    address public shortfall;
+    address public convertibleBaseAsset;    //当前是 USDT
+    address public shortfall; 
     address public pancakeSwapRouter;
-    uint256 public minAmountToConvert;
+    uint256 public minAmountToConvert;      //当前是 10usdt
 
-    /// @notice Emitted when pool registry address is updated
+
     event PoolRegistryUpdated(address indexed oldPoolRegistry, address indexed newPoolRegistry);
-
-    /// @notice Emitted when shortfall contract address is updated
     event ShortfallContractUpdated(address indexed oldShortfallContract, address indexed newShortfallContract);
-
-    /// @notice Emitted when convertible base asset is updated
     event ConvertibleBaseAssetUpdated(address indexed oldConvertibleBaseAsset, address indexed newConvertibleBaseAsset);
-
-    /// @notice Emitted when PancakeSwap router contract address is updated
     event PancakeSwapRouterUpdated(address indexed oldPancakeSwapRouter, address indexed newPancakeSwapRouter);
-
-    /// @notice Emitted when minimum amount to convert is updated
     event MinAmountToConvertUpdated(uint256 oldMinAmountToConvert, uint256 newMinAmountToConvert);
-
-    /// @notice Emitted when pools assets are swapped
     event SwappedPoolsAssets(address[] markets, uint256[] amountsOutMin, uint256 totalAmount);
-
-    /// @notice Emitted when reserves are transferred for auction
     event TransferredReserveForAuction(address indexed comptroller, uint256 amount);
+
+
 
     /// @dev Note that the contract is upgradeable. Use initialize() or reinitializers
     ///      to set the state variables.
@@ -66,15 +55,13 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
     }
 
     /**
-     * @notice Initializes the deployer to owner.
-     * @param pancakeSwapRouter_ Address of the PancakeSwap router
-     * @param minAmountToConvert_ Minimum amount assets must be worth to convert into base asset
-     * @param convertibleBaseAsset_ Address of the base asset
-     * @param accessControlManager_ Address of the access control contract
-     * @param loopsLimit_ Limit for the loops in the contract to avoid DOS
-     * @custom:error ZeroAddressNotAllowed is thrown when PCS router address is zero
-     * @custom:error ZeroAddressNotAllowed is thrown when convertible base asset address is zero
-     */
+      * @notice 将部署者初始化为所有者。
+      - pancakeSwapRouter_ PancakeSwap路由器的地址
+      - minAmountToConvert_ 最低金额资产必须符合转换为基础资产的价值
+      - ConvertibleBaseAsset_ 基础资产的地址
+      - accessControlManager_ 访问控制合约的地址
+      - loopsLimit_ 限制合约中的循环以避免DOS
+      */
     function initialize(
         address pancakeSwapRouter_,
         uint256 minAmountToConvert_,
@@ -97,23 +84,14 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
         _setMaxLoopsLimit(loopsLimit_);
     }
 
-    /**
-     * @notice Pool registry setter
-     * @param poolRegistry_ Address of the pool registry
-     * @custom:error ZeroAddressNotAllowed is thrown when pool registry address is zero
-     */
+    // 设置poolRegistry
     function setPoolRegistry(address poolRegistry_) external onlyOwner {
         ensureNonzeroAddress(poolRegistry_);
         address oldPoolRegistry = poolRegistry;
         poolRegistry = poolRegistry_;
         emit PoolRegistryUpdated(oldPoolRegistry, poolRegistry_);
     }
-
-    /**
-     * @notice Shortfall contract address setter
-     * @param shortfallContractAddress_ Address of the auction contract
-     * @custom:error ZeroAddressNotAllowed is thrown when shortfall contract address is zero
-     */
+    // 设置shortfall
     function setShortfallContractAddress(address shortfallContractAddress_) external onlyOwner {
         ensureNonzeroAddress(shortfallContractAddress_);
 
@@ -121,23 +99,14 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
         shortfall = shortfallContractAddress_;
         emit ShortfallContractUpdated(oldShortfallContractAddress, shortfallContractAddress_);
     }
-
-    /**
-     * @notice PancakeSwap router address setter
-     * @param pancakeSwapRouter_ Address of the PancakeSwap router
-     * @custom:error ZeroAddressNotAllowed is thrown when PCS router address is zero
-     */
+    // 设置pancakeSwapRouter
     function setPancakeSwapRouter(address pancakeSwapRouter_) external onlyOwner {
         ensureNonzeroAddress(pancakeSwapRouter_);
         address oldPancakeSwapRouter = pancakeSwapRouter;
         pancakeSwapRouter = pancakeSwapRouter_;
         emit PancakeSwapRouterUpdated(oldPancakeSwapRouter, pancakeSwapRouter_);
     }
-
-    /**
-     * @notice Min amount to convert setter
-     * @param minAmountToConvert_ Min amount to convert.
-     */
+    // 设置最低兑换金额
     function setMinAmountToConvert(uint256 minAmountToConvert_) external {
         _checkAccessAllowed("setMinAmountToConvert(uint256)");
         require(minAmountToConvert_ > 0, "Risk Fund: Invalid min amount to convert");
@@ -146,10 +115,7 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
         emit MinAmountToConvertUpdated(oldMinAmountToConvert, minAmountToConvert_);
     }
 
-    /**
-     * @notice Sets a new convertible base asset
-     * @param _convertibleBaseAsset Address for new convertible base asset.
-     */
+    // 设置基础资产的地址
     function setConvertibleBaseAsset(address _convertibleBaseAsset) external {
         _checkAccessAllowed("setConvertibleBaseAsset(address)");
         require(_convertibleBaseAsset != address(0), "Risk Fund: new convertible base asset address invalid");
@@ -160,15 +126,7 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
         emit ConvertibleBaseAssetUpdated(oldConvertibleBaseAsset, _convertibleBaseAsset);
     }
 
-    /**
-     * @notice Swap array of pool assets into base asset's tokens of at least a minimum amount
-     * @param markets Array of vTokens whose assets to swap for base asset
-     * @param amountsOutMin Minimum amount to receive for swap
-     * @param paths A path consisting of PCS token pairs for each swap
-     * @param deadline Deadline for the swap
-     * @return Number of swapped tokens
-     * @custom:error ZeroAddressNotAllowed is thrown if PoolRegistry contract address is not configured
-     */
+    // 兑换为usdt
     function swapPoolsAssets(
         address[] calldata markets,
         uint256[] calldata amountsOutMin,
@@ -195,6 +153,8 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
             require(Comptroller(comptroller).isMarketListed(VToken(markets[i])), "market is not listed");
 
             uint256 swappedTokens = _swapAsset(VToken(markets[i]), comptroller, amountsOutMin[i], paths[i]);
+
+            //swappedTokens 兑换出来的usdt数量
             _poolsAssetsReserves[comptroller][convertibleBaseAsset] += swappedTokens;
             assetsReserves[convertibleBaseAsset] += swappedTokens;
             totalAmount = totalAmount + swappedTokens;
@@ -206,21 +166,17 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
     }
 
     /**
-     * @notice Transfer tokens for auction.
-     * @param comptroller Comptroller of the pool.
-     * @param amount Amount to be transferred to auction contract.
-     * @return Number reserved tokens.
-     */
+      * @notice 转让代币进行拍卖。
+      - comptroller 池的控制器。
+      - amount 要转移到拍卖合约的金额。
+      */
     function transferReserveForAuction(
         address comptroller,
         uint256 amount
     ) external override nonReentrant returns (uint256) {
         address shortfall_ = shortfall;
         require(msg.sender == shortfall_, "Risk fund: Only callable by Shortfall contract");
-        require(
-            amount <= _poolsAssetsReserves[comptroller][convertibleBaseAsset],
-            "Risk Fund: Insufficient pool reserve."
-        );
+        require(amount <= _poolsAssetsReserves[comptroller][convertibleBaseAsset],"Risk Fund: Insufficient pool reserve.");
         unchecked {
             _poolsAssetsReserves[comptroller][convertibleBaseAsset] =
                 _poolsAssetsReserves[comptroller][convertibleBaseAsset] -
@@ -236,41 +192,27 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
         return amount;
     }
 
-    /**
-     * @notice Set the limit for the loops can iterate to avoid the DOS
-     * @param limit Limit for the max loops can execute at a time
-     */
     function setMaxLoopsLimit(uint256 limit) external onlyOwner {
         _setMaxLoopsLimit(limit);
     }
 
-    /**
-     * @notice Get the Amount of the Base asset in the risk fund for the specific pool.
-     * @param comptroller  Comptroller address(pool).
-     * @return Base Asset's reserve in risk fund.
-     */
+    // 获取可转换基础资产数量
     function getPoolsBaseAssetReserves(address comptroller) external view returns (uint256) {
         require(ComptrollerInterface(comptroller).isComptroller(), "Risk Fund: Comptroller address invalid");
         return _poolsAssetsReserves[comptroller][convertibleBaseAsset];
     }
 
-    /**
-     * @notice Update the reserve of the asset for the specific pool after transferring to risk fund.
-     * @param comptroller  Comptroller address(pool).
-     * @param asset Asset address.
-     */
+    // ProtocolShareReserve 会调这个方法
     function updateAssetsState(address comptroller, address asset) public override(IRiskFund, ReserveHelpers) {
         super.updateAssetsState(comptroller, asset);
     }
 
     /**
-     * @dev Swap single asset to base asset.
-     * @param vToken VToken
-     * @param comptroller Comptroller address
-     * @param amountOutMin Minimum amount to receive for swap
-     * @param path A path for the swap consisting of PCS token pairs
-     * @return Number of swapped tokens.
-     */
+      * @dev 将单一资产交换为基础资产。
+      - vToken VToken
+      - comptroller 控制器地址
+      - amountOutMin 接收交换的最小金额
+      */
     function _swapAsset(
         VToken vToken,
         address comptroller,
@@ -300,10 +242,8 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
 
         if (underlyingAsset != convertibleBaseAsset_) {
             require(path[0] == underlyingAsset, "RiskFund: swap path must start with the underlying asset");
-            require(
-                path[path.length - 1] == convertibleBaseAsset_,
-                "RiskFund: finally path must be convertible base asset"
-            );
+            require( path[path.length - 1] == convertibleBaseAsset_,"RiskFund: finally path must be convertible base asset");
+
             address pancakeSwapRouter_ = pancakeSwapRouter;
             IERC20Upgradeable(underlyingAsset).approveOrRevert(pancakeSwapRouter_, 0);
             IERC20Upgradeable(underlyingAsset).approveOrRevert(pancakeSwapRouter_, balanceOfUnderlyingAsset);

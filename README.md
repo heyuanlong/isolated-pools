@@ -38,6 +38,7 @@ Pool GameFi
   - 存入资产，mint VToken，是根据exchangeRate兑换的。
   - 每次借款的时候，会先计算并存储最新借款的本息，让存储最新的累计利率。(跟持币生息的原理差不多)
   - ProtocolShareReserve 就是个分发协议收益金的简单合约，一部分转给protocolIncome，另一部分转给riskFund合约
+  - RiskFund 把一些资产兑换为USDT，并把USDT发送到Shortfall
 
   
 
@@ -66,7 +67,12 @@ Pool GameFi
 - `RiskFund`              风险基金
 - `ReserveHelpers`        储备助手
 
-这三个合约旨在持有从利息储备和清算激励中积累的资金，将一部分发送到协议金库，并将剩余部分发送到“RiskFund”合约。 当在 vToken 合约中调用“reduceReserves()”时，所有累积的清算费用和利息准备金都会发送到“ProtocolShareReserve”合约。 一旦资金转移到“ProtocolShareReserve”，任何人都可以调用“releaseFunds()”将 50% 转移到“protocolIncome”地址，另外 50% 转移到“riskFund”合约。 一旦进入“riskFund”合约，代币就可以通过 PancakeSwap 对交换为可转换基础资产，并可由授权账户进行更新。 当代币转换为“convertibleBaseAsset”时，它们可以在“Shortfall”合约中用于拍卖池中的坏账。 请注意，正如每个池是隔离的一样，每个池的风险基金也是隔离的：在拍卖该池的坏账时，只能使用该池的相关风险基金。
+- 这三个合约旨在持有从利息储备和清算激励中积累的资金，将一部分发送到协议金库，并将剩余部分发送到“RiskFund”合约。 
+- 当在 vToken 合约中调用“reduceReserves()”时，所有累积的清算费用和利息准备金都会发送到“ProtocolShareReserve”合约。
+- 一旦资金转移到“ProtocolShareReserve”，任何人都可以调用“releaseFunds()”将 50% 转移到“protocolIncome”地址，另外 50% 转移到“riskFund”合约。 
+- 一旦进入“riskFund”合约，代币就可以通过 PancakeSwap 对交换为可转换基础资产，并可由授权账户进行更新。 
+- 当代币转换为“convertibleBaseAsset”时，它们可以在“Shortfall”合约中用于拍卖池中的坏账。 
+- 请注意，正如每个池是隔离的一样，每个池的风险基金也是隔离的：在拍卖该池的坏账时，只能使用该池的相关风险基金。
 
 ### Shortfall 坏账
 
