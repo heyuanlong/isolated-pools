@@ -197,6 +197,7 @@ contract RiskFund is AccessControlledV8, ExponentialNoError, ReserveHelpers, Max
     }
 
     // 获取可转换基础资产数量
+    // 某个池子的风险基金数量(USDT)
     function getPoolsBaseAssetReserves(address comptroller) external view returns (uint256) {
         require(ComptrollerInterface(comptroller).isComptroller(), "Risk Fund: Comptroller address invalid");
         return _poolsAssetsReserves[comptroller][convertibleBaseAsset];

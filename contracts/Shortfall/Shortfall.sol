@@ -46,12 +46,12 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         uint256 startBlock;
         AuctionType auctionType;
         AuctionStatus status;
-        VToken[] markets;
-        uint256 seizedRiskFund;
+        VToken[] markets;   
+        uint256 seizedRiskFund;     //本次风险基金(USDT)
         address highestBidder;     //最高出价者
-        uint256 highestBidBps;
+        uint256 highestBidBps;     //最好的bps
         uint256 highestBidBlock;
-        uint256 startBidBps;
+        uint256 startBidBps;        //开始的bps
         mapping(VToken => uint256) marketDebt;      // 坏账总量
         mapping(VToken => uint256) bidAmount;       // 出价数量
     }
@@ -213,6 +213,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
     function closeAuction(address comptroller) external nonReentrant {
         Auction storage auction = auctions[comptroller];
 
+        // 判断可正常结束拍卖
         require(_isStarted(auction), "no on-going auction");
         require(
             block.number > auction.highestBidBlock + nextBidderBlockLimit && auction.highestBidder != address(0),
@@ -264,28 +265,21 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         );
     }
 
-    /**
-     * @notice Start a auction when there is not currently one active
-     - comptroller Comptroller address of the pool
-     * @custom:event Emits AuctionStarted event on success
-     * @custom:event Errors if auctions are paused
-     */
+    // 当前没有活跃拍卖时开始拍卖
+    //  - comptroller 池的控制器地址
     function startAuction(address comptroller) external nonReentrant {
         require(!auctionsPaused, "Auctions are paused");
         _startAuction(comptroller);
     }
 
-    /**
-     * @notice Restart an auction
-     - comptroller Address of the pool
-     * @custom:event Emits AuctionRestarted event on successful restart
-     */
+    // @notice 重新开始拍卖
+    //  - 矿池的控制器地址
     function restartAuction(address comptroller) external nonReentrant {
         Auction storage auction = auctions[comptroller];
 
         require(!auctionsPaused, "auctions are paused");
         require(_isStarted(auction), "no on-going auction");
-        require(_isStale(auction), "you need to wait for more time for first bidder");
+        require(_isStale(auction), "you need to wait for more time for first bidder"); //过期了
 
         auction.status = AuctionStatus.ENDED;
 
@@ -293,12 +287,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         _startAuction(comptroller);
     }
 
-    /**
-     * @notice Update next bidder block limit which is used determine when an auction can be closed
-     - _nextBidderBlockLimit  New next bidder block limit
-     * @custom:event Emits NextBidderBlockLimitUpdated on success
-     * @custom:access Restricted by ACM
-     */
+    // 设置下一个投标人的投标限期
     function updateNextBidderBlockLimit(uint256 _nextBidderBlockLimit) external {
         _checkAccessAllowed("updateNextBidderBlockLimit(uint256)");
         require(_nextBidderBlockLimit != 0, "_nextBidderBlockLimit must not be 0");
@@ -307,12 +296,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         emit NextBidderBlockLimitUpdated(oldNextBidderBlockLimit, _nextBidderBlockLimit);
     }
 
-    /**
-     * @notice Updates the incentive BPS
-     - _incentiveBps New incentive BPS
-     * @custom:event Emits IncentiveBpsUpdated on success
-     * @custom:access Restricted by ACM
-     */
+    // 更新激励BPS
     function updateIncentiveBps(uint256 _incentiveBps) external {
         _checkAccessAllowed("updateIncentiveBps(uint256)");
         require(_incentiveBps != 0, "incentiveBps must not be 0");
@@ -321,12 +305,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         emit IncentiveBpsUpdated(oldIncentiveBps, _incentiveBps);
     }
 
-    /**
-     * @notice Update minimum pool bad debt to start auction
-     - _minimumPoolBadDebt Minimum bad debt in the base asset for a pool to start auction
-     * @custom:event Emits MinimumPoolBadDebtUpdated on success
-     * @custom:access Restricted by ACM
-     */
+    // Update minimum pool bad debt to start auction
     function updateMinimumPoolBadDebt(uint256 _minimumPoolBadDebt) external {
         _checkAccessAllowed("updateMinimumPoolBadDebt(uint256)");
         uint256 oldMinimumPoolBadDebt = minimumPoolBadDebt;
@@ -334,12 +313,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         emit MinimumPoolBadDebtUpdated(oldMinimumPoolBadDebt, _minimumPoolBadDebt);
     }
 
-    /**
-     * @notice Update wait for first bidder block count. If the first bid is not made within this limit, the auction is closed and needs to be restarted
-     - _waitForFirstBidder  New wait for first bidder block count
-     * @custom:event Emits WaitForFirstBidderUpdated on success
-     * @custom:access Restricted by ACM
-     */
+    // Update wait for first bidder block count.
     function updateWaitForFirstBidder(uint256 _waitForFirstBidder) external {
         _checkAccessAllowed("updateWaitForFirstBidder(uint256)");
         uint256 oldWaitForFirstBidder = waitForFirstBidder;
@@ -347,14 +321,6 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         emit WaitForFirstBidderUpdated(oldWaitForFirstBidder, _waitForFirstBidder);
     }
 
-    /**
-     * @notice Update the pool registry this shortfall supports
-     * @dev After Pool Registry is deployed we need to set the pool registry address
-     - poolRegistry_ Address of pool registry contract
-     * @custom:event Emits PoolRegistryUpdated on success
-     * @custom:access Restricted to owner
-     * @custom:error ZeroAddressNotAllowed is thrown when pool registry address is zero
-     */
     function updatePoolRegistry(address poolRegistry_) external onlyOwner {
         ensureNonzeroAddress(poolRegistry_);
         address oldPoolRegistry = poolRegistry;
@@ -362,12 +328,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         emit PoolRegistryUpdated(oldPoolRegistry, poolRegistry_);
     }
 
-    /**
-     * @notice Pause auctions. This disables starting new auctions but lets the current auction finishes
-     * @custom:event Emits AuctionsPaused on success
-     * @custom:error Errors is auctions are paused
-     * @custom:access Restricted by ACM
-     */
+    //停止拍卖
     function pauseAuctions() external {
         _checkAccessAllowed("pauseAuctions()");
         require(!auctionsPaused, "Auctions are already paused");
@@ -375,12 +336,7 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         emit AuctionsPaused(msg.sender);
     }
 
-    /**
-     * @notice Resume paused auctions.
-     * @custom:event Emits AuctionsResumed on success
-     * @custom:error Errors is auctions are active
-     * @custom:access Restricted by ACM
-     */
+    // 重启拍卖
     function resumeAuctions() external {
         _checkAccessAllowed("resumeAuctions()");
         require(auctionsPaused, "Auctions are not paused");
@@ -402,15 +358,14 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
             "auction is on-going"
         );
 
-        auction.highestBidBps = 0;
+        //清空上次的拍卖数据
+        auction.highestBidBps = 0; 
         auction.highestBidBlock = 0;
-
         uint256 marketsCount = auction.markets.length;
         for (uint256 i; i < marketsCount; ++i) {
             VToken vToken = auction.markets[i];
             auction.marketDebt[vToken] = 0;
         }
-
         delete auction.markets;
 
         VToken[] memory vTokens = _getAllMarkets(comptroller);
@@ -432,23 +387,30 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
             auction.marketDebt[vTokens[i]] = marketBadDebt;
             marketsDebt[i] = marketBadDebt;
         }
-
+        //要求池子的坏账金额大于minimumPoolBadDebt(1000 USDT)
         require(poolBadDebt >= minimumPoolBadDebt, "pool bad debt is too low");
 
+        //风险基金USDT价值
         priceOracle.updateAssetPrice(riskFund.convertibleBaseAsset());
         uint256 riskFundBalance = (priceOracle.getPrice(riskFund.convertibleBaseAsset()) *
             riskFund.getPoolsBaseAssetReserves(comptroller)) / EXP_SCALE;
+
         uint256 remainingRiskFundBalance = riskFundBalance;
+
+        //坏账加上 10% 的激励
         uint256 badDebtPlusIncentive = poolBadDebt + ((poolBadDebt * incentiveBps) / MAX_BPS);
+
         if (badDebtPlusIncentive >= riskFundBalance) {
+            //如果该池的坏账超过风险基金加上 10% 的激励，则拍卖获胜者将取决于谁将偿还该池坏账的最大比例。 拍卖获胜者偿还坏账的投标百分比，以换取全部风险基金。
             auction.startBidBps =
                 (MAX_BPS * MAX_BPS * remainingRiskFundBalance) /
                 (poolBadDebt * (MAX_BPS + incentiveBps));
             remainingRiskFundBalance = 0;
             auction.auctionType = AuctionType.LARGE_POOL_DEBT;
         } else {
-            uint256 maxSeizeableRiskFundBalance = badDebtPlusIncentive;
 
+            //如果风险基金涵盖了池子的坏账加上 10% 的激励，那么拍卖获胜者将取决于谁将获得风险基金的最小百分比，以换取偿还池子的所有坏账。
+            uint256 maxSeizeableRiskFundBalance = badDebtPlusIncentive;
             remainingRiskFundBalance = remainingRiskFundBalance - maxSeizeableRiskFundBalance;
             auction.auctionType = AuctionType.LARGE_RISK_FUND;
             auction.startBidBps = MAX_BPS;
@@ -479,32 +441,20 @@ contract Shortfall is Ownable2StepUpgradeable, AccessControlledV8, ReentrancyGua
         return ResilientOracleInterface(ComptrollerViewInterface(comptroller).oracle());
     }
 
-    /**
-     * @dev Returns all markets of the pool
-     - comptroller Address of the pool's comptroller
-     * @return markets The pool's markets as VToken array
-     */
+    // Returns all markets of the pool
     function _getAllMarkets(address comptroller) internal view returns (VToken[] memory) {
         return ComptrollerInterface(comptroller).getAllMarkets();
     }
 
-    /**
-     * @dev Checks if the auction has started
-     - auction The auction to query the status for
-     * @return True if the auction has started
-     */
+
     function _isStarted(Auction storage auction) internal view returns (bool) {
         return auction.status == AuctionStatus.STARTED;
     }
 
-    /**
-     * @dev Checks if the auction is stale, i.e. there's no bidder and the auction
-     *   was started more than waitForFirstBidder blocks ago.
-     - auction The auction to query the status for
-     * @return True if the auction is stale
-     */
+    // 是否没人投标，并且过期了
     function _isStale(Auction storage auction) internal view returns (bool) {
         bool noBidder = auction.highestBidder == address(0);
         return noBidder && (block.number > auction.startBlock + waitForFirstBidder);
     }
 }
+
