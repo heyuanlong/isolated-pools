@@ -12,20 +12,19 @@ import { Comptroller } from "../Comptroller.sol";
 import { MaxLoopsLimitHelper } from "../MaxLoopsLimitHelper.sol";
 
 /**
- * @title `RewardsDistributor`
- * @author Venus
- * @notice Contract used to configure, track and distribute rewards to users based on their actions (borrows and supplies) in the protocol.
- * Users can receive additional rewards through a `RewardsDistributor`. Each `RewardsDistributor` proxy is initialized with a specific reward
- * token and `Comptroller`, which can then distribute the reward token to users that supply or borrow in the associated pool.
- * Authorized users can set the reward token borrow and supply speeds for each market in the pool. This sets a fixed amount of reward
- * token to be released each block for borrowers and suppliers, which is distributed based on a user’s percentage of the borrows or supplies
- * respectively. The owner can also set up reward distributions to contributor addresses (distinct from suppliers and borrowers) by setting
- * their contributor reward token speed, which similarly allocates a fixed amount of reward token per block.
- *
- * The owner has the ability to transfer any amount of reward tokens held by the contract to any other address. Rewards are not distributed
- * automatically and must be claimed by a user calling `claimRewardToken()`. Users should be aware that it is up to the owner and other centralized
- * entities to ensure that the `RewardsDistributor` holds enough tokens to distribute the accumulated rewards of users and contributors.
- */
+  * @title `RewardsDistributor`
+  * @notice 合约用于根据用户在协议中的操作（借款和供应）来配置、跟踪和分配奖励给用户。
+  * 用户可以通过“RewardsDistributor”获得额外奖励。 每个“RewardsDistributor”代理均使用特定奖励进行初始化
+  * 代币和“Comptroller”，然后可以将奖励代币分配给在关联池中提供或借入的用户。
+  * 授权用户可以为池中每个市场设置奖励代币的借贷和供应速度。 这设定了固定金额的奖励
+  * 每个区块为借款人和供应商释放的代币，根据用户借款或供应的百分比进行分配
+  * 分别。 所有者还可以通过设置向贡献者地址（不同于供应商和借款人）设置奖励分配
+  * 他们的贡献者奖励代币速度，同样为每个区块分配固定数量的奖励代币。
+  *
+  * 所有者有能力将合约持有的任意数量的奖励代币转移到任何其他地址。 奖励未发放
+  * 自动且必须由用户调用“claimRewardToken()”来领取。 用户应该意识到，这取决于所有者和其他中心化的人
+  * 确保“RewardsDistributor”持有足够代币来分配用户和贡献者累积奖励的实体。
+  */
 contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, AccessControlledV8, MaxLoopsLimitHelper {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
@@ -72,7 +71,7 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
 
     IERC20Upgradeable public rewardToken;
 
-    /// @notice Emitted when REWARD TOKEN is distributed to a supplier
+
     event DistributedSupplierRewardToken(
         VToken indexed vToken,
         address indexed supplier,
@@ -80,8 +79,6 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
         uint256 rewardTokenTotal,
         uint256 rewardTokenSupplyIndex
     );
-
-    /// @notice Emitted when REWARD TOKEN is distributed to a borrower
     event DistributedBorrowerRewardToken(
         VToken indexed vToken,
         address indexed borrower,
@@ -89,35 +86,15 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
         uint256 rewardTokenTotal,
         uint256 rewardTokenBorrowIndex
     );
-
-    /// @notice Emitted when a new supply-side REWARD TOKEN speed is calculated for a market
     event RewardTokenSupplySpeedUpdated(VToken indexed vToken, uint256 newSpeed);
-
-    /// @notice Emitted when a new borrow-side REWARD TOKEN speed is calculated for a market
     event RewardTokenBorrowSpeedUpdated(VToken indexed vToken, uint256 newSpeed);
-
-    /// @notice Emitted when REWARD TOKEN is granted by admin
     event RewardTokenGranted(address indexed recipient, uint256 amount);
-
-    /// @notice Emitted when a new REWARD TOKEN speed is set for a contributor
     event ContributorRewardTokenSpeedUpdated(address indexed contributor, uint256 newSpeed);
-
-    /// @notice Emitted when a market is initialized
     event MarketInitialized(address indexed vToken);
-
-    /// @notice Emitted when a reward token supply index is updated
     event RewardTokenSupplyIndexUpdated(address indexed vToken);
-
-    /// @notice Emitted when a reward token borrow index is updated
     event RewardTokenBorrowIndexUpdated(address indexed vToken, Exp marketBorrowIndex);
-
-    /// @notice Emitted when a reward for contributor is updated
     event ContributorRewardsUpdated(address indexed contributor, uint256 rewardAccrued);
-
-    /// @notice Emitted when a reward token last rewarding block for supply is updated
     event SupplyLastRewardingBlockUpdated(address indexed vToken, uint32 newBlock);
-
-    /// @notice Emitted when a reward token last rewarding block for borrow is updated
     event BorrowLastRewardingBlockUpdated(address indexed vToken, uint32 newBlock);
 
     modifier onlyComptroller() {
@@ -131,13 +108,13 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice RewardsDistributor initializer
-     * @dev Initializes the deployer to owner
-     * @param comptroller_ Comptroller to attach the reward distributor to
-     * @param rewardToken_ Reward token to distribute
-     * @param loopsLimit_ Maximum number of iterations for the loops in this contract
-     * @param accessControlManager_ AccessControlManager contract address
-     */
+      * @notice RewardsDistributor 初始值设定项
+      * @dev 将部署者初始化为所有者
+      - comptroller_ 将奖励分配器附加到的 Comptroller
+      - rewardToken_ 要分发的奖励代币
+      - LoopsLimit_ 本合约中循环的最大迭代次数
+      - accessControlManager_AccessControlManager合约地址
+      */
     function initialize(
         Comptroller comptroller_,
         IERC20Upgradeable rewardToken_,
@@ -182,15 +159,15 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     /*** Reward Token Distribution ***/
 
     /**
-     * @notice Calculate reward token accrued by a borrower and possibly transfer it to them
-     *         Borrowers will begin to accrue after the first interaction with the protocol.
-     * @dev This function should only be called when the user has a borrow position in the market
-     *      (e.g. Comptroller.preBorrowHook, and Comptroller.preRepayHook)
-     *      We avoid an external call to check if they are in the market to save gas because this function is called in many places
-     * @param vToken The market in which the borrower is interacting
-     * @param borrower The address of the borrower to distribute REWARD TOKEN to
-     * @param marketBorrowIndex The current global borrow index of vToken
-     */
+      * @notice 计算借款人累积的奖励代币，并可能将其转移给他们
+      * 借款人将在与协议第一次交互后开始累积。
+      * @dev 只有当用户在市场上有借入头寸时才应调用此函数
+      *（例如 Comptroller.preBorrowHook 和 Comptroller.preRepayHook）
+      * 我们避免外部调用来检查它们是否在市场上以节省gas，因为这个函数在很多地方都会被调用
+      - vToken 借款人互动的市场
+      - borrower 向其分发奖励代币的借款人的地址
+      - marketBorrowIndex vToken 当前的全球借贷指数
+      */
     function distributeBorrowerRewardToken(
         address vToken,
         address borrower,
@@ -206,8 +183,8 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     /**
      * @notice Transfer REWARD TOKEN to the recipient
      * @dev Note: If there is not enough REWARD TOKEN, we do not perform the transfer all
-     * @param recipient The address of the recipient to transfer REWARD TOKEN to
-     * @param amount The amount of REWARD TOKEN to (possibly) transfer
+     - recipient The address of the recipient to transfer REWARD TOKEN to
+     - amount The amount of REWARD TOKEN to (possibly) transfer
      */
     function grantRewardToken(address recipient, uint256 amount) external onlyOwner {
         uint256 amountLeft = _grantRewardToken(recipient, amount);
@@ -220,11 +197,11 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Set REWARD TOKEN borrow and supply speeds for the specified markets
-     * @param vTokens The markets whose REWARD TOKEN speed to update
-     * @param supplySpeeds New supply-side REWARD TOKEN speed for the corresponding market
-     * @param borrowSpeeds New borrow-side REWARD TOKEN speed for the corresponding market
-     */
+      * @notice 设置指定市场的 REWARD TOKEN 借贷和供应速度
+      - vTokens 奖励令牌更新速度快的市场
+      - SupplySpeeds 相应市场的新供应方 REWARD TOKEN 速度
+      - borrowSpeeds 相应市场的新借方 REWARD TOKEN 速度
+      */
     function setRewardTokenSpeeds(
         VToken[] memory vTokens,
         uint256[] memory supplySpeeds,
@@ -240,11 +217,11 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Set REWARD TOKEN last rewarding block for the specified markets
-     * @param vTokens The markets whose REWARD TOKEN last rewarding block to update
-     * @param supplyLastRewardingBlocks New supply-side REWARD TOKEN last rewarding block for the corresponding market
-     * @param borrowLastRewardingBlocks New borrow-side REWARD TOKEN last rewarding block for the corresponding market
-     */
+      * @notice 设置指定市场的奖励令牌最后奖励块
+      - vTokens 奖励令牌最后更新奖励块的市场
+      - SupplyLastRewardingBlocks 新的供应方 REWARD TOKEN 相应市场的最后奖励区块
+      - borrowLastRewardingBlocks 新的借方 REWARD TOKEN 相应市场的最后奖励区块
+      */
     function setLastRewardingBlocks(
         VToken[] calldata vTokens,
         uint32[] calldata supplyLastRewardingBlocks,
@@ -266,10 +243,10 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Set REWARD TOKEN speed for a single contributor
-     * @param contributor The contributor whose REWARD TOKEN speed to update
-     * @param rewardTokenSpeed New REWARD TOKEN speed for contributor
-     */
+      * @notice 为单个贡献者设置奖励令牌速度
+      - 贡献者 REWARD TOKEN 更新速度快的贡献者
+      - rewardTokenSpeed 贡献者的新奖励令牌速度
+      */
     function setContributorRewardTokenSpeed(address contributor, uint256 rewardTokenSpeed) external onlyOwner {
         // note that REWARD TOKEN speed could be set to 0 to halt liquidity rewards for a contributor
         updateContributorRewards(contributor);
@@ -290,7 +267,7 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
 
     /**
      * @notice Claim all the rewardToken accrued by holder in all markets
-     * @param holder The address to claim REWARD TOKEN for
+     - holder The address to claim REWARD TOKEN for
      */
     function claimRewardToken(address holder) external {
         return claimRewardToken(holder, comptroller.getAllMarkets());
@@ -298,7 +275,7 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
 
     /**
      * @notice Set the limit for the loops can iterate to avoid the DOS
-     * @param limit Limit for the max loops can execute at a time
+     - limit Limit for the max loops can execute at a time
      */
     function setMaxLoopsLimit(uint256 limit) external onlyOwner {
         _setMaxLoopsLimit(limit);
@@ -306,7 +283,7 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
 
     /**
      * @notice Calculate additional accrued REWARD TOKEN for a contributor since last accrual
-     * @param contributor The address to calculate contributor rewards for
+     - contributor The address to calculate contributor rewards for
      */
     function updateContributorRewards(address contributor) public {
         uint256 rewardTokenSpeed = rewardTokenContributorSpeeds[contributor];
@@ -324,10 +301,10 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Claim all the rewardToken accrued by holder in the specified markets
-     * @param holder The address to claim REWARD TOKEN for
-     * @param vTokens The list of markets to claim REWARD TOKEN in
-     */
+      * @notice 领取持有者在指定市场累积的所有rewardToken
+      - 持有者领取奖励令牌的地址
+      - vTokens 领取奖励代币的市场列表
+      */
     function claimRewardToken(address holder, VToken[] memory vTokens) public {
         uint256 vTokensCount = vTokens.length;
 
@@ -350,11 +327,11 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Set REWARD TOKEN last rewarding block for a single market.
-     * @param vToken market's whose reward token last rewarding block to be updated
-     * @param supplyLastRewardingBlock New supply-side REWARD TOKEN last rewarding block for market
-     * @param borrowLastRewardingBlock New borrow-side REWARD TOKEN last rewarding block for market
-     */
+      * @notice 设置单一市场的最后奖励区块奖励令牌。
+      - vToken市场的奖励代币最后更新的奖励块
+      - SupplyLastRewardingBlock 新供应方 REWARD TOKEN 市场最后奖励区块
+      - borrowLastRewardingBlock 新的借方 REWARD TOKEN 市场最后奖励区块
+      */
     function _setLastRewardingBlock(
         VToken vToken,
         uint32 supplyLastRewardingBlock,
@@ -391,11 +368,11 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Set REWARD TOKEN speed for a single market.
-     * @param vToken market's whose reward token rate to be updated
-     * @param supplySpeed New supply-side REWARD TOKEN speed for market
-     * @param borrowSpeed New borrow-side REWARD TOKEN speed for market
-     */
+      * @notice 设置单一市场的奖励代币速度。
+      - vToken市场奖励代币率待更新
+      - SupplySpeed 新的供应方奖励代币市场速度
+      - borrowSpeed 新的借方 REWARD TOKEN 市场速度
+      */
     function _setRewardTokenSpeed(VToken vToken, uint256 supplySpeed, uint256 borrowSpeed) internal {
         require(comptroller.isMarketListed(vToken), "rewardToken market is not listed");
 
@@ -425,8 +402,8 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
 
     /**
      * @notice Calculate REWARD TOKEN accrued by a supplier and possibly transfer it to them.
-     * @param vToken The market in which the supplier is interacting
-     * @param supplier The address of the supplier to distribute REWARD TOKEN to
+     - vToken The market in which the supplier is interacting
+     - supplier The address of the supplier to distribute REWARD TOKEN to
      */
     function _distributeSupplierRewardToken(address vToken, address supplier) internal {
         RewardToken storage supplyState = rewardTokenSupplyState[vToken];
@@ -458,11 +435,11 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Calculate reward token accrued by a borrower and possibly transfer it to them.
-     * @param vToken The market in which the borrower is interacting
-     * @param borrower The address of the borrower to distribute REWARD TOKEN to
-     * @param marketBorrowIndex The current global borrow index of vToken
-     */
+      * @notice 计算借款人累积的奖励代币，并可能将其转移给他们。
+      - vToken 借款人互动的市场
+      - 借款人 向其分发奖励代币的借款人的地址
+      - marketBorrowIndex vToken 当前的全球借贷指数
+      */
     function _distributeBorrowerRewardToken(address vToken, address borrower, Exp memory marketBorrowIndex) internal {
         RewardToken storage borrowState = rewardTokenBorrowState[vToken];
         uint256 borrowIndex = borrowState.index;
@@ -472,18 +449,18 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
         rewardTokenBorrowerIndex[vToken][borrower] = borrowIndex;
 
         if (borrowerIndex == 0 && borrowIndex >= INITIAL_INDEX) {
-            // Covers the case where users borrowed tokens before the market's borrow state index was set.
-            // Rewards the user with REWARD TOKEN accrued from the start of when borrower rewards were first
-            // set for the market.
+            // 涵盖用户在市场借入状态指数设置之前借入代币的情况。
+             // 用从借款人第一次获得奖励开始时累积的奖励代币奖励用户
+             // 为市场设置。
             borrowerIndex = INITIAL_INDEX;
         }
 
-        // Calculate change in the cumulative sum of the REWARD TOKEN per borrowed unit accrued
+        // 计算每个借入单位的 REWARD TOKEN 累计总和的变化
         Double memory deltaIndex = Double({ mantissa: sub_(borrowIndex, borrowerIndex) });
 
         uint256 borrowerAmount = div_(VToken(vToken).borrowBalanceStored(borrower), marketBorrowIndex);
 
-        // Calculate REWARD TOKEN accrued: vTokenAmount * accruedPerBorrowedUnit
+        // 计算累积的奖励令牌: vTokenAmount * accruedPerBorrowedUnit
         if (borrowerAmount != 0) {
             uint256 borrowerDelta = mul_(borrowerAmount, deltaIndex);
 
@@ -497,8 +474,8 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     /**
      * @notice Transfer REWARD TOKEN to the user.
      * @dev Note: If there is not enough REWARD TOKEN, we do not perform the transfer all.
-     * @param user The address of the user to transfer REWARD TOKEN to
-     * @param amount The amount of REWARD TOKEN to (possibly) transfer
+     - user The address of the user to transfer REWARD TOKEN to
+     - amount The amount of REWARD TOKEN to (possibly) transfer
      * @return The amount of REWARD TOKEN which was NOT transferred to the user
      */
     function _grantRewardToken(address user, uint256 amount) internal returns (uint256) {
@@ -511,10 +488,10 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Accrue REWARD TOKEN to the market by updating the supply index
-     * @param vToken The market whose supply index to update
-     * @dev Index is a cumulative sum of the REWARD TOKEN per vToken accrued
-     */
+      * @notice 通过更新供应指数向市场累积REWARD TOKEN
+      - vToken 供应指数更新的市场
+      * @dev 指数是每个 vToken 累积的奖励令牌的总和
+      */
     function _updateRewardTokenSupplyIndex(address vToken) internal {
         RewardToken storage supplyState = rewardTokenSupplyState[vToken];
         uint256 supplySpeed = rewardTokenSupplySpeeds[vToken];
@@ -545,11 +522,11 @@ contract RewardsDistributor is ExponentialNoError, Ownable2StepUpgradeable, Acce
     }
 
     /**
-     * @notice Accrue REWARD TOKEN to the market by updating the borrow index
-     * @param vToken The market whose borrow index to update
-     * @param marketBorrowIndex The current global borrow index of vToken
-     * @dev Index is a cumulative sum of the REWARD TOKEN per vToken accrued
-     */
+      * @notice 通过更新借入指数向市场累积奖励代币
+      - vToken 需要更新借币指数的市场
+      - marketBorrowIndex vToken 当前的全球借贷指数
+      * @dev 指数是每个 vToken 累积的奖励令牌的总和
+      */
     function _updateRewardTokenBorrowIndex(address vToken, Exp memory marketBorrowIndex) internal {
         RewardToken storage borrowState = rewardTokenBorrowState[vToken];
         uint256 borrowSpeed = rewardTokenBorrowSpeeds[vToken];
