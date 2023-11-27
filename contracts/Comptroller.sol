@@ -856,15 +856,12 @@ contract Comptroller is
     }
 
     /**
-     * @notice Calculate number of tokens of collateral asset to seize given an underlying amount
-     * @dev Used in liquidation (called in vToken.liquidateBorrowFresh)
-     - vTokenBorrowed The address of the borrowed vToken
-     - vTokenCollateral The address of the collateral vToken
-     - actualRepayAmount The amount of vTokenBorrowed underlying to convert into vTokenCollateral tokens
-     * @return error Always NO_ERROR for compatibility with Venus core tooling
-     * @return tokensToSeize Number of vTokenCollateral tokens to be seized in a liquidation
-     * @custom:error PriceError if the oracle returns an invalid price
-     */
+      * @notice 计算要扣押给定基础金额的抵押资产代币数量
+      * @dev 用于清算（在 vToken.liquidateBorrowFresh 中调用）
+      - vTokenBorrowed 借用的 vToken 的地址
+      - vTokenCollateral 抵押品 vToken 的地址
+      - actualRepayAmount vTokenBorrowed底层要转换为vTokenCollateral代币的金额
+      */
     function liquidateCalculateSeizeTokens(
         address vTokenBorrowed,
         address vTokenCollateral,
@@ -874,6 +871,7 @@ contract Comptroller is
         uint256 priceBorrowedMantissa = _safeGetUnderlyingPrice(VToken(vTokenBorrowed));
         uint256 priceCollateralMantissa = _safeGetUnderlyingPrice(VToken(vTokenCollateral));
 
+        // 乘上清算激励1.1
         /*
          * Get the exchange rate and calculate the number of collateral tokens to seize:
          *  seizeAmount = actualRepayAmount * liquidationIncentive * priceBorrowed / priceCollateral
@@ -896,13 +894,14 @@ contract Comptroller is
     }
 
     /**
-     * @notice Returns reward speed given a vToken
-     - vToken The vToken to get the reward speeds for
-     * @return rewardSpeeds Array of total supply and borrow speeds and reward token for all reward distributors
-     */
+      * @notice 返回给定 vToken 的奖励速度
+      - vToken 用于获取奖励速度的 vToken
+      * @returnrewardSpeeds 所有奖励分配者的总供应和借贷速度以及奖励代币的数组
+      */
     function getRewardsByMarket(address vToken) external view returns (RewardSpeeds[] memory rewardSpeeds) {
         uint256 rewardsDistributorsLength = rewardsDistributors.length;
         rewardSpeeds = new RewardSpeeds[](rewardsDistributorsLength);
+
         for (uint256 i; i < rewardsDistributorsLength; ++i) {
             RewardsDistributor rewardsDistributor = rewardsDistributors[i];
             address rewardToken = address(rewardsDistributor.rewardToken());
@@ -915,26 +914,15 @@ contract Comptroller is
         return rewardSpeeds;
     }
 
-    /**
-     * @notice Return all reward distributors for this pool
-     * @return Array of RewardDistributor addresses
-     */
+    // @notice 返回该池的所有奖励分配者
     function getRewardDistributors() external view returns (RewardsDistributor[] memory) {
         return rewardsDistributors;
     }
 
-    /**
-     * @notice A marker method that returns true for a valid Comptroller contract
-     * @return Always true
-     */
     function isComptroller() external pure override returns (bool) {
         return true;
     }
 
-    /**
-     * @notice Update the prices of all the tokens associated with the provided account
-     - account Address of the account to get associated tokens with
-     */
     function updatePrices(address account) public {
         VToken[] memory vTokens = accountAssets[account];
         uint256 vTokensCount = vTokens.length;
@@ -946,12 +934,6 @@ contract Comptroller is
         }
     }
 
-    /**
-     * @notice Checks if a certain action is paused on a market
-     - market vToken address
-     - action Action to check
-     * @return paused True if the action is paused otherwise false
-     */
     function actionPaused(address market, Action action) public view returns (bool) {
         return _actionPaused[market][action];
     }
@@ -987,10 +969,10 @@ contract Comptroller is
     }
 
     /**
-     * @notice Internal function to validate that a market hasn't already been added
-     * and if it hasn't adds it
-     - vToken The market to support
-     */
+      * @notice 用于验证市场尚未添加的内部函数
+      * 如果还没有添加它
+      - vToken 支持的市场
+      */
     function _addMarket(address vToken) internal {
         uint256 marketsCount = allMarkets.length;
 
@@ -1004,12 +986,6 @@ contract Comptroller is
         _ensureMaxLoops(marketsCount);
     }
 
-    /**
-     * @dev Pause/unpause an action on a market
-     - market Market to pause/unpause the action on
-     - action Action id to pause/unpause
-     - paused The new paused state (true=paused, false=unpaused)
-     */
     function _setActionPaused(address market, Action action, bool paused) internal {
         require(markets[market].isListed, "cannot pause a market that is not listed");
         _actionPaused[market][action] = paused;
@@ -1145,11 +1121,7 @@ contract Comptroller is
         return snapshot;
     }
 
-    /**
-     * @dev Retrieves price from oracle for an asset and checks it is nonzero
-     - asset Address for asset to query price
-     * @return Underlying price
-     */
+    //
     function _safeGetUnderlyingPrice(VToken asset) internal view returns (uint256) {
         uint256 oraclePriceMantissa = oracle.getUnderlyingPrice(address(asset));
         if (oraclePriceMantissa == 0) {
@@ -1158,20 +1130,12 @@ contract Comptroller is
         return oraclePriceMantissa;
     }
 
-    /**
-     * @dev Return collateral factor for a market
-     - asset Address for asset
-     * @return Collateral factor as exponential
-     */
+    // 抵押因子
     function _getCollateralFactor(VToken asset) internal view returns (Exp memory) {
         return Exp({ mantissa: markets[address(asset)].collateralFactorMantissa });
     }
 
-    /**
-     * @dev Retrieves liquidation threshold for a market as an exponential
-     - asset Address for asset to liquidation threshold
-     * @return Liquidation threshold as exponential
-     */
+    // 清算门槛
     function _getLiquidationThreshold(VToken asset) internal view returns (Exp memory) {
         return Exp({ mantissa: markets[address(asset)].liquidationThresholdMantissa });
     }
@@ -1196,20 +1160,17 @@ contract Comptroller is
         return (vTokenBalance, borrowBalance, exchangeRateMantissa);
     }
 
-    /// @notice Reverts if the call is not from expectedSender
-    /// @param expectedSender Expected transaction sender
     function _checkSenderIs(address expectedSender) internal view {
         if (msg.sender != expectedSender) {
             revert UnexpectedSender(expectedSender, msg.sender);
         }
     }
 
-    /// @notice Reverts if a certain action is paused on a market
-    /// @param market Market to check
-    /// @param action Action to check
     function _checkActionPauseState(address market, Action action) private view {
         if (actionPaused(market, action)) {
             revert ActionPaused(market, action);
         }
     }
 }
+
+
